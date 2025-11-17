@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.swp
+
+# Virtual env
+.venv/
+env/
+venv/
+
+# VSCode
+.vscode/
+
+# Logs and runtime artifacts
+logs/
+*.log
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# Local config
+config.ini
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# IDE specific
+.idea/
+*.sublime-project
+*.sublime-workspace

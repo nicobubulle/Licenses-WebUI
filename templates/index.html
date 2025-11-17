@@ -1,0 +1,279 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{{ _('title') }}</title>
+
+  <!-- Standard favicon (browsers fall back to /favicon.ico) -->
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+
+  <!-- PNG favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icon-192.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon.ico') }}">
+
+  <!-- Apple touch -->
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+
+  <!-- Android / PWA manifest -->
+  <link rel="manifest" href="{{ url_for('static', filename='site.webmanifest') }}">
+
+  <!-- Prevent caching during development: ?v=1 (update when icon changes) -->
+  <meta name="theme-color" content="#ffffff">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{
+      --primary:#007bff;
+      --danger:#dc3545;
+      --muted:#666;
+      --card:#f9f9f9;
+      --surface:#ffffff;
+      --border:#e6e6e6;
+      --radius:8px;
+    }
+    body { font-family: Arial, Helvetica, sans-serif; margin: 20px; background: #fafafa; color:#111; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    h1 { font-size:1.25rem; margin:0; }
+
+    /* Toolbar */
+    .toolbar { display:flex; gap:8px; align-items:center; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-weight:600; }
+    .btn svg { width:16px; height:16px; display:block; }
+    .btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
+    .btn-danger { background: linear-gradient(180deg,var(--danger),#b02a37); color:#fff; border-color:rgba(0,0,0,0.08); }
+    .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
+
+    /* Spinner */
+    .spinner {
+      width:16px; height:16px; border-radius:50%;
+      border:2px solid rgba(255,255,255,0.25); border-top-color:rgba(255,255,255,0.9);
+      animation:spin 1s linear infinite; display:inline-block;
+    }
+    .spinner-dark {
+      border:2px solid rgba(0,0,0,0.12); border-top-color:rgba(0,0,0,0.6);
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    .small { font-size: 0.9em; color: var(--muted); }
+    .error { color: red; white-space: pre-wrap; margin-top:8px; }
+
+    /* Card / table */
+    .card { background:var(--card); padding:12px; border-radius:var(--radius); border:1px solid var(--border); }
+    table { border-collapse: collapse; width: 100%; background:var(--surface); border-radius:6px; overflow:hidden; }
+    th, td { border-bottom:1px solid var(--border); padding:10px; vertical-align:top; text-align:left; }
+    th { background:#fbfbfb; font-weight:700; font-size:0.95em; }
+    .users { font-size: 0.95em; color: #111; }
+    .user-line { margin-bottom: 6px; }
+    .toast { position:fixed; right:12px; bottom:12px; background:#222; color:#fff; padding:10px 14px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.12); display:none; max-width:320px; white-space:pre-wrap; }
+
+    /* service message box */
+    .service-msg {
+      position:relative;
+      white-space:pre-wrap;
+      margin: 12px 0;
+      padding:10px 12px;
+      border:1px solid #ccc;
+      background:#fff;
+      border-radius:6px;
+      box-shadow:0 1px 4px rgba(0,0,0,0.04);
+    }
+    .service-close {
+      position:absolute;
+      right:8px;
+      top:6px;
+      border:0;
+      background:transparent;
+      color:#666;
+      font-size:18px;
+      line-height:1;
+      cursor:pointer;
+      padding:4px;
+    }
+
+    @media (max-width:720px){
+      header { flex-direction:column; align-items:stretch; gap:10px; }
+      .toolbar { justify-content:flex-start; flex-wrap:wrap; }
+      th, td { font-size:0.9em; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Etat des licences FLEXnet</h1>
+    <div class="toolbar">
+      <div class="small">Auto-refresh toutes les {{ refresh_minutes }} minutes.</div>
+
+      <button id="btn-refresh" class="btn btn-primary" title="{{ _('refresh_title') }}" aria-label="{{ _('refresh_title') }}">
+        <!-- use external svg from static -->
+        <img src="{{ url_for('static', filename='refresh.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+        <span id="btn-refresh-label">{{ _('refresh_label') }}</span>
+      </button>
+
+      {% if show_restart %}
+      <button id="btn-restart" class="btn btn-danger" title="{{ _('restart_title') }}" aria-label="{{ _('restart_title') }}">
+        <!-- use external svg from static -->
+        <img src="{{ url_for('static', filename='restart.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+        {{ _('restart_label') }}
+      </button>
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="card" style="margin-bottom:12px;">
+    <div id="last" class="small"></div>
+    <div id="error" class="error"></div>
+  </div>
+
+  <div class="card">
+    <table id="lic-table" aria-live="polite">
+      <thead>
+        <tr>
+          <th>Produit</th>
+          <th>Utilisation</th>
+          <th>Expiration</th>
+          <th>Utilisateurs connectés</th>
+        </tr>
+      </thead>
+      <tbody id="tbody">
+        <tr><td colspan="4">Chargement...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+const REFRESH_MS = {{ refresh_minutes }} * 60 * 1000;
+const I18N = {{ i18n_json|safe }};
+
+function t(key, vars){
+  const v = I18N[key] || key;
+  if(!vars) return v;
+  return v.replace(/\{(\w+)\}/g, (_,n)=> (vars[n]!==undefined?vars[n]:''));
+}
+
+const statusUrl = "/status";
+const refreshUrl = "/refresh";
+const restartUrl = "/restart";
+
+const btnRefresh = document.getElementById("btn-refresh");
+const btnRefreshLabel = document.getElementById("btn-refresh-label");
+const btnRestart = document.getElementById("btn-restart");
+const toast = document.getElementById("toast");
+
+let refreshing = false;
+
+function showToast(text, timeout=4000){
+  toast.textContent = text;
+  toast.style.display = "block";
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> toast.style.display = "none", timeout);
+}
+
+async function fetchStatus(){
+  try {
+    const r = await fetch(statusUrl);
+    const data = await r.json();
+    const tbody = document.getElementById("tbody");
+    const lastDiv = document.getElementById("last");
+    const errDiv = document.getElementById("error");
+    errDiv.textContent = "";
+
+    if (!data.ok) {
+      tbody.innerHTML = "<tr><td colspan='4'>Erreur lors de la récupération</td></tr>";
+      errDiv.textContent = data.error || "Erreur inconnue";
+      lastDiv.textContent = "Dernière tentative: " + (data.last_update ? new Date(data.last_update*1000).toLocaleString() : "—");
+      return;
+    }
+
+    const licenses = data.licenses || {};
+    let html = "";
+    const names = Object.keys(licenses).sort();
+    if (names.length === 0) {
+      html = "<tr><td colspan='4'>Aucune licence trouvée</td></tr>";
+    } else {
+      for (const name of names) {
+        const item = licenses[name] || {};
+        const total = (item.total === null || item.total === undefined) ? "?" : item.total;
+        const used = (item.used === null || item.used === undefined) ? (item.users ? item.users.length : 0) : item.used;
+        const usage = `${used}/${total}`;
+        const expiry = item.expiry || "";
+        let usersHtml = "";
+        if (item.users && item.users.length>0) {
+          for (const u of item.users) {
+            usersHtml += `<div class="user-line">${u.user} @ ${u.computer} — v${u.version} — ${u.start}</div>`;
+          }
+        } else {
+          usersHtml = "<div class='small'>Aucun utilisateur</div>";
+        }
+
+        html += `<tr>
+                  <td><strong>${name}</strong></td>
+                  <td>${usage}</td>
+                  <td>${expiry}</td>
+                  <td class="users">${usersHtml}</td>
+                </tr>`;
+      }
+    }
+
+    tbody.innerHTML = html;
+    lastDiv.textContent = "Dernière mise à jour : " + new Date(data.last_update*1000).toLocaleString();
+  } catch (e) {
+    document.getElementById("tbody").innerHTML = "<tr><td colspan='4'>Erreur fetch</td></tr>";
+    document.getElementById("error").textContent = e.toString();
+  }
+}
+
+async function doRefresh(){
+  if(refreshing) return;
+  refreshing = true;
+  btnRefresh.disabled = true;
+  btnRefreshLabel.textContent = t('loading');
+  try{
+    const r = await fetch(refreshUrl, {method: 'POST'});
+    if(r.ok){
+      showToast(t('refresh_done'));
+      await fetchStatus();
+    } else {
+      showToast(t('refresh_error', {err: 'HTTP ' + r.status}));
+    }
+  } catch(e){
+    showToast(t('fetch_error'));
+  } finally{
+    refreshing = false;
+    btnRefresh.disabled = false;
+    btnRefreshLabel.textContent = t('refresh_label');
+  }
+}
+
+async function doRestart(){
+  if(!confirm(t('confirm_restart'))) return;
+  if(btnRestart) btnRestart.disabled = true;
+  try{
+    const r = await fetch(restartUrl, {method: 'POST'});
+    const payload = await r.json().catch(()=>null);
+    if(r.ok && payload && payload.status === "ok"){
+      showToast(t('restart_success'));
+      // no auto-refresh or service-msg UI; user can manual refresh
+    } else {
+      let msg = (payload && payload.message) ? payload.message : ('HTTP ' + r.status);
+      showToast(t('restart_error', {err: msg}));
+    }
+  } catch(e){
+    showToast(t('fetch_error'));
+  } finally{
+    if(btnRestart) btnRestart.disabled = false;
+  }
+}
+
+btnRefresh.addEventListener("click", doRefresh);
+if(btnRestart) btnRestart.addEventListener("click", doRestart);
+
+// initial
+fetchStatus();
+// auto refresh
+setInterval(fetchStatus, REFRESH_MS);
+</script>
+</body>
+</html>
