@@ -186,14 +186,20 @@ DEFAULT_LOCALE = "en"
 TRANSLATIONS = {}
 
 def load_translations():
-    """Load translation JSON files from i18n folder."""
+    """Load translation JSON files from i18n folder (tolerate // comment lines)."""
     global TRANSLATIONS
     i18n_dir = os.path.join(os.path.dirname(__file__), "i18n")
     for locale in SUPPORTED_LOCALES:
         filepath = os.path.join(i18n_dir, f"{locale}.json")
         try:
             with open(filepath, "r", encoding="utf-8") as f:
-                TRANSLATIONS[locale] = json.load(f)
+                raw = f.read()
+            # Strip lines starting with // (workspace file header comments)
+            cleaned = "\n".join(
+                line for line in raw.splitlines()
+                if not line.strip().startswith("//")
+            )
+            TRANSLATIONS[locale] = json.loads(cleaned)
             logger.info(f"Loaded translations for {locale}")
         except FileNotFoundError:
             logger.warning(f"Translation file not found: {filepath}")
@@ -768,27 +774,28 @@ threading.Thread(target=refresh_loop, daemon=True).start()
 @app.route("/")
 def index():
     global _last_service_msg
-    
     show = request.args.get("service_msg")
     service_msg = _last_service_msg if show and _last_service_msg else None
-    _last_service_msg = None  # Clear after use
+    _last_service_msg = None
 
-    # Determine if restart button should be shown:
-    # - enabled in config AND
-    # - current process has admin privileges
     try:
         has_admin = is_admin()
     except Exception:
         has_admin = False
-
     show_restart = bool(ENABLE_RESTART and has_admin)
 
-    return render_template(
+    resp = make_response(render_template(
         "index.html",
         refresh_minutes=REFRESH_MIN,
         service_msg=service_msg,
         show_restart=show_restart
-    )
+    ))
+
+    # Persist ?lang=xx into cookie
+    qlang = request.args.get("lang")
+    if qlang in SUPPORTED_LOCALES:
+        resp.set_cookie("lang", qlang, max_age=30*24*3600)  # 30 days
+    return resp
 
 
 @app.route("/status")

@@ -100,19 +100,17 @@
 </head>
 <body>
   <header>
-    <h1>Etat des licences FLEXnet</h1>
+    <h1>{{ _('title') }}</h1>
     <div class="toolbar">
-      <div class="small">Auto-refresh toutes les {{ refresh_minutes }} minutes.</div>
+      <div class="small">{{ _('auto_refresh', minutes=refresh_minutes) }}</div>
 
       <button id="btn-refresh" class="btn btn-primary" title="{{ _('refresh_title') }}" aria-label="{{ _('refresh_title') }}">
-        <!-- use external svg from static -->
         <img src="{{ url_for('static', filename='refresh.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
         <span id="btn-refresh-label">{{ _('refresh_label') }}</span>
       </button>
 
       {% if show_restart %}
       <button id="btn-restart" class="btn btn-danger" title="{{ _('restart_title') }}" aria-label="{{ _('restart_title') }}">
-        <!-- use external svg from static -->
         <img src="{{ url_for('static', filename='restart.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
         {{ _('restart_label') }}
       </button>
@@ -129,14 +127,14 @@
     <table id="lic-table" aria-live="polite">
       <thead>
         <tr>
-          <th>Produit</th>
-          <th>Utilisation</th>
-          <th>Expiration</th>
-          <th>Utilisateurs connectés</th>
+          <th>{{ _('product') }}</th>
+          <th>{{ _('usage') }}</th>
+          <th>{{ _('expiration') }}</th>
+          <th>{{ _('users_connected') }}</th>
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="4">Chargement...</td></tr>
+        <tr><td colspan="4">{{ _('loading') }}</td></tr>
       </tbody>
     </table>
   </div>
@@ -181,9 +179,9 @@ async function fetchStatus(){
     errDiv.textContent = "";
 
     if (!data.ok) {
-      tbody.innerHTML = "<tr><td colspan='4'>Erreur lors de la récupération</td></tr>";
-      errDiv.textContent = data.error || "Erreur inconnue";
-      lastDiv.textContent = "Dernière tentative: " + (data.last_update ? new Date(data.last_update*1000).toLocaleString() : "—");
+      tbody.innerHTML = `<tr><td colspan='4'>${t('fetch_error')}</td></tr>`;
+      errDiv.textContent = data.error || t('fetch_error');
+      lastDiv.textContent = t('last_attempt', {when: (data.last_update ? new Date(data.last_update*1000).toLocaleString() : "—")});
       return;
     }
 
@@ -191,7 +189,7 @@ async function fetchStatus(){
     let html = "";
     const names = Object.keys(licenses).sort();
     if (names.length === 0) {
-      html = "<tr><td colspan='4'>Aucune licence trouvée</td></tr>";
+      html = `<tr><td colspan='4'>${t('no_licenses')}</td></tr>`;
     } else {
       for (const name of names) {
         const item = licenses[name] || {};
@@ -205,7 +203,7 @@ async function fetchStatus(){
             usersHtml += `<div class="user-line">${u.user} @ ${u.computer} — v${u.version} — ${u.start}</div>`;
           }
         } else {
-          usersHtml = "<div class='small'>Aucun utilisateur</div>";
+          usersHtml = `<div class='small'>${t('no_users')}</div>`;
         }
 
         html += `<tr>
@@ -218,10 +216,10 @@ async function fetchStatus(){
     }
 
     tbody.innerHTML = html;
-    lastDiv.textContent = "Dernière mise à jour : " + new Date(data.last_update*1000).toLocaleString();
+    lastDiv.textContent = t('last_update', {when: new Date(data.last_update*1000).toLocaleString()});
   } catch (e) {
-    document.getElementById("tbody").innerHTML = "<tr><td colspan='4'>Erreur fetch</td></tr>";
-    document.getElementById("error").textContent = e.toString();
+    document.getElementById("tbody").innerHTML = `<tr><td colspan='4'>${t('fetch_error')}</td></tr>`;
+     document.getElementById("error").textContent = e.toString();
   }
 }
 
