@@ -193,6 +193,9 @@ LATEST_VERSION = VERSION
 UPDATE_AVAILABLE = False
 LATEST_URL = f"https://github.com/{GITHUB_REPO}"
 
+# check interval in seconds (24 hours)
+UPDATE_CHECK_INTERVAL = 24 * 3600
+
 def check_github_latest_version():
     """Check GitHub releases API for the latest version (runs in background)."""
     global LATEST_VERSION, UPDATE_AVAILABLE, LATEST_URL
@@ -215,6 +218,19 @@ def check_github_latest_version():
     except Exception as e:
         logger.debug(f"GitHub version check failed: {e}")
     logger.debug("GitHub version check finished with no usable release info.")
+
+def update_check_loop(interval=UPDATE_CHECK_INTERVAL):
+    """Run check_github_latest_version immediately and then once every `interval` seconds until shutdown."""
+    logger.info("Starting background update-check loop (interval=%s seconds)", interval)
+    while not _shutdown_event.is_set():
+        try:
+            check_github_latest_version()
+        except Exception as e:
+            logger.debug("Exception in update_check_loop: %s", e)
+        # wait for interval but wake early if shutdown event is set
+        if _shutdown_event.wait(interval):
+            break
+    logger.info("Update-check loop exiting due to shutdown.")
 
 def load_translations():
     """Load translation JSON files from i18n folder (tolerate // comment lines)."""
@@ -955,12 +971,12 @@ def elevate_to_admin():
 if __name__ == "__main__":
     logger.info("Starting Licenses WebUI application...")
 
-    # Start GitHub version-check thread (non-blocking)
+    # Start background update-check loop (immediate check + daily repeats)
     try:
-        t_ver = threading.Thread(target=check_github_latest_version, daemon=True)
+        t_ver = threading.Thread(target=update_check_loop, daemon=True)
         t_ver.start()
     except Exception as e:
-        logger.debug(f"Could not start version-check thread: {e}")
+        logger.debug(f"Could not start update-check thread: {e}")
 
     # Check and elevate to admin if needed
     if not elevate_to_admin():
