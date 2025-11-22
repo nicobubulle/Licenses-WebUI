@@ -21,5 +21,6 @@
   "restart_error": "Erreur redémarrage: {err}",
   "fetch_error": "Erreur fetch",
   "close": "Fermer",
-  "service_msg_title": "Sortie du service"
+  "service_msg_title": "Sortie du service",
+  "update_available": "Mise à jour disponible : v{version}"
 }

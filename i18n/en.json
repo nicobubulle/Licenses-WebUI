@@ -21,5 +21,6 @@
   "restart_error": "Restart error: {err}",
   "fetch_error": "Fetch error",
   "close": "Close",
-  "service_msg_title": "Service output"
+  "service_msg_title": "Service output",
+  "update_available": "Update available: v{version}"
 }

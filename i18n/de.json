@@ -21,5 +21,6 @@
   "restart_error": "Fehler beim Neustart: {err}",
   "fetch_error": "Fehler beim Abrufen",
   "close": "Schließen",
-  "service_msg_title": "Service-Ausgabe"
+  "service_msg_title": "Service-Ausgabe",
+  "update_available": "Update verfügbar: v{version}"
 }

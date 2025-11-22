@@ -185,6 +185,37 @@ SUPPORTED_LOCALES = ("en", "fr", "de", "es")
 DEFAULT_LOCALE = "en"
 TRANSLATIONS = {}
 
+# Application version and GitHub repo for update checks
+VERSION = "1.1"
+GITHUB_REPO = "nicobubulle/Licenses-WebUI"
+GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+LATEST_VERSION = VERSION
+UPDATE_AVAILABLE = False
+LATEST_URL = f"https://github.com/{GITHUB_REPO}"
+
+def check_github_latest_version():
+    """Check GitHub releases API for the latest version (runs in background)."""
+    global LATEST_VERSION, UPDATE_AVAILABLE, LATEST_URL
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            GITHUB_RELEASES_API,
+            headers={"User-Agent": "Licenses-WebUI-Version-Checker"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.load(resp)
+            tag = data.get("tag_name") or data.get("name")
+            if tag:
+                latest = str(tag).lstrip("vV").strip()
+                LATEST_VERSION = latest
+                LATEST_URL = data.get("html_url") or f"https://github.com/{GITHUB_REPO}"
+                UPDATE_AVAILABLE = (latest != VERSION)
+                logger.info(f"GitHub check: latest={latest}, current={VERSION}, update={UPDATE_AVAILABLE}")
+                return
+    except Exception as e:
+        logger.debug(f"GitHub version check failed: {e}")
+    logger.debug("GitHub version check finished with no usable release info.")
+
 def load_translations():
     """Load translation JSON files from i18n folder (tolerate // comment lines)."""
     global TRANSLATIONS
@@ -244,7 +275,16 @@ def inject_i18n():
     locale = get_locale()
     i18n = TRANSLATIONS.get(locale, TRANSLATIONS.get(DEFAULT_LOCALE, {}))
     i18n_json = json.dumps(i18n)
-    return dict(_=lambda k, **kw: translate(k, **kw), i18n=i18n, i18n_json=i18n_json, lang=locale)
+    return dict(
+        _=lambda k, **kw: translate(k, **kw),
+        i18n=i18n,
+        i18n_json=i18n_json,
+        lang=locale,
+        app_version=VERSION,
+        latest_version=LATEST_VERSION,
+        update_available=UPDATE_AVAILABLE,
+        latest_url=LATEST_URL
+    )
 
 # ---------- System Tray ----------
 
@@ -266,7 +306,7 @@ def create_systray():
                 img = Image.open(icon_path)
                 # ensure RGBA and reasonable size for tray icon
                 img = img.convert("RGBA")
-                img = img.resize((64, 64), Image.LANCZOS)
+                img = img.resize((64, 64), Image.Resampling.LANCZOS)
         except Exception as e:
             logger.warning(f"Failed to load static favicon for systray: {e}")
             img = None
@@ -303,10 +343,6 @@ def create_systray():
         icon = Icon("Licenses WebUI", img, menu=menu, tooltip=tooltip)
         try:
             icon.title = "Licenses WebUI"
-        except Exception:
-            pass
-        try:
-            icon.tooltip = tooltip
         except Exception:
             pass
 
@@ -918,7 +954,14 @@ def elevate_to_admin():
 
 if __name__ == "__main__":
     logger.info("Starting Licenses WebUI application...")
-    
+
+    # Start GitHub version-check thread (non-blocking)
+    try:
+        t_ver = threading.Thread(target=check_github_latest_version, daemon=True)
+        t_ver.start()
+    except Exception as e:
+        logger.debug(f"Could not start version-check thread: {e}")
+
     # Check and elevate to admin if needed
     if not elevate_to_admin():
         logger.error("This application requires administrator privileges to restart services.")

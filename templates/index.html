@@ -100,7 +100,15 @@
 </head>
 <body>
   <header>
-    <h1>{{ _('title') }}</h1>
+    <div class="title-row">
+      <h1 style="display:inline-block; margin:0;">{{ _('title') }}</h1>
+      <small style="display:inline-block; margin-left:10px; color:#666; font-size:0.9em;">
+        v{{ app_version }}
+        {% if update_available %}
+          &nbsp;<a href="{{ latest_url }}" target="_blank" style="color:red; font-weight:bold; text-decoration:underline;">{{ _('update_available', version=latest_version) }}</a>
+        {% endif %}
+      </small>
+    </div>
     <div class="toolbar">
       <div class="small">{{ _('auto_refresh', minutes=refresh_minutes) }}</div>
 
@@ -142,7 +150,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
 <script>
-const REFRESH_MS = {{ refresh_minutes }} * 60 * 1000;
+const REFRESH_MS = {{ refresh_minutes|tojson }} * 60 * 1000;
 const I18N = {{ i18n_json|safe }};
 
 function t(key, vars){

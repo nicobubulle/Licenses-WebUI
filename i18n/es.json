@@ -21,5 +21,6 @@
   "restart_error": "Error al reiniciar: {err}",
   "fetch_error": "Error al obtener datos",
   "close": "Cerrar",
-  "service_msg_title": "Salida del servicio"
+  "service_msg_title": "Salida del servicio",
+  "update_available": "Actualización disponible: v{version}"
 }
