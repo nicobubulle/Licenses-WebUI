@@ -25,5 +25,11 @@
   "update_available": "Actualización disponible: v{version}",
   "view_details": "Ver detalles",
   "update_message": "Una nueva versión está disponible: v{latest} (actual: v{current})",
-  "update_title": "Actualización disponible"
+  "update_title": "Actualización disponible",
+  "extratime_title": "Uso prolongado detectado",
+  "extratime_message": "El usuario **{user}@{computer}** tiene características que exceden {threshold}h:\n{features}",
+  "soldout_message" : "La característica **{feature}** está completamente utilizada ({used}/{total}).",
+  "soldout_available_message" : "La característica **{feature}** ya no está completamente utilizada ({used}/{total}).",
+  "duplicate_title": "Detección de uso duplicado de licencia",
+  "duplicate_message": "**Característica:** {feature}\n**Usuario:** {user}\n**Computadora:** {computer}\n**Cantidad de usos:** {count}"
 }

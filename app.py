@@ -1,5 +1,6 @@
 import os
 import re
+import datetime
 import time
 import threading
 import subprocess
@@ -123,6 +124,24 @@ webhook =
 
 # Enable the "update available" notification (yes/no)
 notify_update = yes
+
+# Enable duplicate user checker notification (yes/no)
+notify_duplicate_checker = no
+
+# Enable extratime notification (yes/no)
+notify_extratime = no
+
+# Extratime duration threshold in hours (default 72h)
+extratime_duration = 72
+
+# Comma-separated list of features to exclude from extratime notifications
+extratime_exclusion =
+
+# Enable sold-out notification (yes/no)
+notify_soldout = no
+
+# Comma-separated list of features to exclude from sold-out notifications
+soldout_exclusion =
 """
     try:
         with open(config_path, "w", encoding="utf-8") as f:
@@ -209,6 +228,38 @@ try:
     TEAMS_NOTIFY_UPDATE = cfg.getboolean("TEAMS", "notify_update", fallback=True)
 except Exception:
     TEAMS_NOTIFY_UPDATE = True
+
+try:
+    TEAMS_NOTIFY_DUPLICATE_CHECKER = cfg.getboolean("TEAMS", "notify_duplicate_checker", fallback=False)
+except Exception:
+    TEAMS_NOTIFY_DUPLICATE_CHECKER = False
+
+try:
+    TEAMS_NOTIFY_EXTRATIME = cfg.getboolean("TEAMS", "notify_extratime", fallback=False)
+except Exception:
+    TEAMS_NOTIFY_EXTRATIME = False
+
+try:
+    TEAMS_EXTRATIME_DURATION = cfg.getint("TEAMS", "extratime_duration", fallback=72)
+except Exception:
+    TEAMS_EXTRATIME_DURATION = 72
+
+try:
+    extratime_excl_str = cfg.get("TEAMS", "extratime_exclusion", fallback="").strip()
+    TEAMS_EXTRATIME_EXCLUSION = [x.strip() for x in extratime_excl_str.split(",") if x.strip()]
+except Exception:
+    TEAMS_EXTRATIME_EXCLUSION = []
+
+try:
+    TEAMS_NOTIFY_SOLDOUT = cfg.getboolean("TEAMS", "notify_soldout", fallback=False)
+except Exception:
+    TEAMS_NOTIFY_SOLDOUT = False
+
+try:
+    soldout_excl_str = cfg.get("TEAMS", "soldout_exclusion", fallback="").strip()
+    TEAMS_SOLDOUT_EXCLUSION = [x.strip() for x in soldout_excl_str.split(",") if x.strip()]
+except Exception:
+    TEAMS_SOLDOUT_EXCLUSION = []
 
 # Teams notification state (avoid duplicate notifications for same release)
 _LAST_TEAMS_NOTIFIED_VERSION = None
@@ -304,7 +355,7 @@ DEFAULT_LOCALE = DEFAULT_LOCALE_RAW if 'DEFAULT_LOCALE_RAW' in globals() and DEF
 TRANSLATIONS = {}
 
 # Application version and GitHub repo for update checks
-VERSION = "1.0"
+VERSION = "1.1"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 LATEST_VERSION = VERSION
@@ -950,6 +1001,234 @@ _last_error = None
 _last_service_msg = None
 _systray = None
 
+# Duplicate checker state: set of (feature, user, computer) tuples already notified
+_notified_duplicates = set()
+
+# Extratime checker state: users already notified (user, computer)
+_notified_extratime = set()
+
+# Sold-out checker state: last known sold-out status per feature
+_soldout_last_state = {}
+
+def _parse_start_timestamp(start_str):
+    """Best-effort parse of lmstat 'start' field into epoch seconds.
+    FLEXlm formats vary; common patterns include:
+      'Fri 11/17 12:34' (weekday MM/DD HH:MM) no year
+      '11/17/2025 12:34' (MM/DD/YYYY HH:MM)
+      'Nov 17 2025 12:34' (Mon DD YYYY HH:MM)
+    We assume local time.
+    Returns None if parsing fails.
+    """
+    if not start_str:
+        return None
+    s = start_str.strip()
+    now = datetime.datetime.now()
+    year = now.year
+    # Try explicit YYYY first
+    for fmt in ["%m/%d/%Y %H:%M", "%b %d %Y %H:%M", "%Y-%m-%d %H:%M:%S", "%m/%d/%Y %H:%M:%S"]:
+        try:
+            dt = datetime.datetime.strptime(s, fmt)
+            return dt.timestamp()
+        except Exception:
+            pass
+    # Patterns without year -> append current year
+    # weekday MM/DD HH:MM
+    m = re.match(r"^[A-Za-z]{3} (\d{1,2})/(\d{1,2}) (\d{1,2}):(\d{2})", s)
+    if m:
+        try:
+            month, day, hour, minute = map(int, m.groups())
+            dt = datetime.datetime(year, month, day, hour, minute)
+            # If date in future (e.g., year rollover), subtract one year
+            if dt > now + datetime.timedelta(days=2):
+                dt = dt.replace(year=year-1)
+            return dt.timestamp()
+        except Exception:
+            pass
+    # MM/DD HH:MM
+    m2 = re.match(r"^(\d{1,2})/(\d{1,2}) (\d{1,2}):(\d{2})", s)
+    if m2:
+        try:
+            month, day, hour, minute = map(int, m2.groups())
+            dt = datetime.datetime(year, month, day, hour, minute)
+            if dt > now + datetime.timedelta(days=2):
+                dt = dt.replace(year=year-1)
+            return dt.timestamp()
+        except Exception:
+            pass
+    return None
+
+def check_extratime(parsed_data):
+    """Check for users exceeding extratime duration across features and notify once per user.
+    Sends one message per user listing all features exceeding the threshold.
+    Excludes features in TEAMS_EXTRATIME_EXCLUSION.
+    """
+    if not (TEAMS_ENABLED and TEAMS_NOTIFY_EXTRATIME):
+        return
+    threshold_hours = TEAMS_EXTRATIME_DURATION
+    exclusions = set(f.lower() for f in TEAMS_EXTRATIME_EXCLUSION)
+    now_ts = time.time()
+    over_map = {}  # (user, computer) -> list of {feature, hours}
+    for feature_name, data in parsed_data.items():
+        lname = feature_name.lower()
+        if lname in exclusions:
+            continue
+        if HIDE_MAINT and 'maint' in lname:
+            continue
+        for u in data.get("users", []):
+            start_ts = _parse_start_timestamp(u.get("start"))
+            if not start_ts:
+                continue
+            hours = (now_ts - start_ts) / 3600.0
+            if hours >= threshold_hours:
+                key = (u.get("user", "?"), u.get("computer", "?"))
+                over_map.setdefault(key, []).append({"feature": feature_name, "hours": hours})
+    if not over_map:
+        return
+    for (user, computer), feats in over_map.items():
+        if (user, computer) in _notified_extratime:
+            continue
+        # Build message
+        lines = [f"{f['feature']}: {f['hours']:.1f}h" for f in sorted(feats, key=lambda x: -x['hours'])]
+        locale = DEFAULT_LOCALE
+        title = TRANSLATIONS.get(locale, {}).get("extratime_title", "Extended Usage Detected")
+        message_tpl = TRANSLATIONS.get(locale, {}).get(
+            "extratime_message",
+            "User **{user}@{computer}** has features exceeding {threshold}h:\n{features}"
+        )
+        try:
+            message = message_tpl.format(
+            user=user,
+            computer=computer,
+            threshold=threshold_hours,
+            features="\n".join(lines)
+            )
+        except Exception:
+            message = (
+            f"User **{user}@{computer}** has features exceeding {threshold_hours}h:\n" +
+            "\n".join(lines)
+            )
+        try:
+            send_teams_notification(title, message)
+            _notified_extratime.add((user, computer))
+            logger.info(f"Extratime notification sent for {user}@{computer} ({len(feats)} features)")
+        except Exception as e:
+            logger.warning(f"Failed to send extratime notification for {user}@{computer}: {e}", exc_info=True)
+
+def check_soldout(parsed_data):
+    """Notify when a feature becomes sold out (used == total) or becomes available again.
+    Excludes features in TEAMS_SOLDOUT_EXCLUSION. Sends notifications on state transitions.
+    """
+    if not (TEAMS_ENABLED and TEAMS_NOTIFY_SOLDOUT):
+        return
+    exclusions = set(f.lower() for f in TEAMS_SOLDOUT_EXCLUSION)
+    global _soldout_last_state
+    changes = []  # (feature, new_state, used, total)
+    for feature_name, data in parsed_data.items():
+        lname = feature_name.lower()
+        if lname in exclusions:
+            continue
+        if HIDE_MAINT and 'maint' in lname:
+            continue
+        total = data.get("total")
+        used = data.get("used")
+        if total is None or used is None:
+            continue
+        sold_out = (used >= total)
+        prev = _soldout_last_state.get(feature_name)
+        if prev is None:
+            # First observation: only notify if currently sold out
+            if sold_out:
+                changes.append((feature_name, True, used, total))
+        else:
+            if prev != sold_out:
+                changes.append((feature_name, sold_out, used, total))
+        _soldout_last_state[feature_name] = sold_out
+    if not changes:
+        return
+    for feature, is_soldout, used, total in changes:
+        locale = DEFAULT_LOCALE
+        if is_soldout:
+            title = TRANSLATIONS.get(locale, {}).get("soldout_title", "Feature Sold Out")
+            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                "soldout_message",
+                "Feature **{feature}** is fully used ({used}/{total})."
+            )
+            try:
+                message = message_tpl.format(feature=feature, used=used, total=total)
+            except Exception:
+                message = f"Feature **{feature}** is fully used ({used}/{total})."
+        else:
+            title = TRANSLATIONS.get(locale, {}).get("soldout_available_title", "Feature Available Again")
+            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                "soldout_available_message",
+                "Feature **{feature}** no longer sold out ({used}/{total})."
+            )
+            try:
+                message = message_tpl.format(feature=feature, used=used, total=total)
+            except Exception:
+                message = f"Feature **{feature}** no longer sold out ({used}/{total})."
+        try:
+            send_teams_notification(title, message)
+            logger.info(f"Soldout state change notified: {feature} -> {'sold out' if is_soldout else 'available'}")
+        except Exception as e:
+            logger.warning(f"Failed to send soldout notification for {feature}: {e}", exc_info=True)
+
+def check_duplicates(parsed_data):
+    """Check for duplicate checkouts (same user@computer with same feature multiple times) and send Teams notifications."""
+    global _notified_duplicates
+    
+    if not TEAMS_ENABLED or not TEAMS_NOTIFY_DUPLICATE_CHECKER:
+        return
+    
+    new_duplicates = []
+    
+    for feature_name, feature_data in parsed_data.items():
+        lname = feature_name.lower()
+        if HIDE_MAINT and 'maint' in lname:
+            continue
+        users = feature_data.get("users", [])
+        if len(users) < 2:
+            continue
+        
+        # Count occurrences of each user@computer pair
+        user_computer_counts = {}
+        for u in users:
+            key = (u["user"], u["computer"])
+            user_computer_counts[key] = user_computer_counts.get(key, 0) + 1
+        
+        # Find duplicates (count > 1)
+        for (user, computer), count in user_computer_counts.items():
+            if count > 1:
+                dup_key = (feature_name, user, computer)
+                if dup_key not in _notified_duplicates:
+                    new_duplicates.append({
+                        "feature": feature_name,
+                        "user": user,
+                        "computer": computer,
+                        "count": count
+                    })
+                    _notified_duplicates.add(dup_key)
+                    logger.info(f"Duplicate checkout detected: {user}@{computer} checked out {feature_name} {count} times")
+    
+    # Send Teams notification for new duplicates
+    if new_duplicates:
+        for dup in new_duplicates:
+            locale = DEFAULT_LOCALE
+            title = TRANSLATIONS.get(locale, {}).get("duplicate_title", "Duplicate License Checkout Detected")
+            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                "duplicate_message",
+                "**Feature:** {feature}\n**User:** {user}\n**Computer:** {computer}\n**Checkout count:** {count}"
+            )
+            try:
+                message = message_tpl.format(feature=dup['feature'], user=dup['user'], computer=dup['computer'], count=dup['count'])
+            except Exception:
+                message = f"**Feature:** {dup['feature']}\n**User:** {dup['user']}\n**Computer:** {dup['computer']}\n**Checkout count:** {dup['count']}"
+            try:
+                send_teams_notification(title, message)
+                logger.info(f"Teams notification sent for duplicate: {dup['user']}@{dup['computer']} - {dup['feature']}")
+            except Exception as e:
+                logger.warning(f"Failed to send duplicate notification: {e}", exc_info=True)
+
 def refresh_loop():
     """Background thread that periodically refreshes license data."""
     global _raw_output, _parsed, _last_update, _last_error
@@ -964,6 +1243,23 @@ def refresh_loop():
                 _last_update = time.time()
                 _last_error = None
                 logger.info("License data refreshed successfully")
+            
+            # Run duplicate checker after updating parsed data
+            try:
+                check_duplicates(parsed)
+            except Exception as e:
+                logger.warning(f"Duplicate checker failed: {e}", exc_info=True)
+            # Run extratime checker
+            try:
+                check_extratime(parsed)
+            except Exception as e:
+                logger.warning(f"Extratime checker failed: {e}", exc_info=True)
+            # Run soldout checker
+            try:
+                check_soldout(parsed)
+            except Exception as e:
+                logger.warning(f"Soldout checker failed: {e}", exc_info=True)
+                
         except Exception as e:
             with _lock:
                 _last_error = str(e)
@@ -1045,6 +1341,21 @@ def manual_refresh():
             _last_update = time.time()
             _last_error = None
         logger.info("Manual refresh completed successfully")
+
+        # Run same checkers as automatic loop
+        try:
+            check_duplicates(parsed)
+        except Exception as e:
+            logger.warning(f"Duplicate checker failed (manual): {e}", exc_info=True)
+        try:
+            check_extratime(parsed)
+        except Exception as e:
+            logger.warning(f"Extratime checker failed (manual): {e}", exc_info=True)
+        try:
+            check_soldout(parsed)
+        except Exception as e:
+            logger.warning(f"Soldout checker failed (manual): {e}", exc_info=True)
+
         return redirect(url_for("index"))
     except Exception as e:
         with _lock:

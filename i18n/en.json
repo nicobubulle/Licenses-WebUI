@@ -25,5 +25,11 @@
   "update_available": "Update available: v{version}",
   "view_details": "View Details",
   "update_message": "A new version is available: v{latest} (current: v{current})",
-  "update_title": "Update available"
+  "update_title": "Update available",
+  "extratime_title": "Extended usage detected",
+  "extratime_message": "User **{user}@{computer}** has features exceeding {threshold}h:\n{features}",
+  "soldout_message" : "Feature **{feature}** is fully used ({used}/{total}).",
+  "soldout_available_message" : "Feature **{feature}** no longer sold out ({used}/{total}).",
+  "duplicate_title": "Duplicate License Checkout Detected",
+  "duplicate_message": "**Feature:** {feature}\n**User:** {user}\n**Computer:** {computer}\n**Checkout count:** {count}"
 }

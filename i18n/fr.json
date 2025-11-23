@@ -25,5 +25,11 @@
   "update_available": "Mise à jour disponible : v{version}",
   "view_details": "Voir les détails",
   "update_message": "Une nouvelle version est disponible : v{latest} (actuelle : v{current})",
-  "update_title": "Mise à jour disponible"
+  "update_title": "Mise à jour disponible",
+  "extratime_title": "Utilisation prolongée détectée",
+  "extratime_message": "L'utilisateur **{user}@{computer}** a des fonctionnalités dépassant {threshold}h :\n{features}",
+  "soldout_message" : "La fonctionnalité **{feature}** est entièrement utilisée ({used}/{total}).",
+  "soldout_available_message" : "La fonctionnalité **{feature}** n'est plus entièrement utilisée ({used}/{total}).",
+  "duplicate_title": "Détection d'utilisation de licence en double",
+  "duplicate_message": "**Fonctionnalité:** {feature}\n**Utilisateur:** {user}\n**Ordinateur:** {computer}\n**Nombre d'utilisations:** {count}"
 }
