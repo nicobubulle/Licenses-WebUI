@@ -22,5 +22,8 @@
   "fetch_error": "Erreur fetch",
   "close": "Fermer",
   "service_msg_title": "Sortie du service",
-  "update_available": "Mise à jour disponible : v{version}"
+  "update_available": "Mise à jour disponible : v{version}",
+  "view_details": "Voir les détails",
+  "update_message": "Une nouvelle version est disponible : v{latest} (actuelle : v{current})",
+  "update_title": "Mise à jour disponible"
 }

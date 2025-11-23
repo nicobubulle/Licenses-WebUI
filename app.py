@@ -98,6 +98,9 @@ web_port = 8080
 # Auto-refresh interval in minutes
 refresh_minutes = 5
 
+# Default UI language (en, fr, de, es)
+default_locale = en
+
 # Hide features containing 'maint' (yes/no)
 hide_maintenance = yes
 
@@ -110,10 +113,21 @@ enable_restart = yes
 [SERVICE]
 # Windows service name to restart
 service_name = FLEXnet License Server
+
+[TEAMS]
+# Enable sending notifications to Microsoft Teams (yes/no)
+enabled = no
+
+# Incoming webhook URL for Microsoft Teams (set this to your connector URL)
+webhook =
+
+# Enable the "update available" notification (yes/no)
+notify_update = yes
 """
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             f.write(sample)
+        # Re-read the newly created config so values are available
         cfg.read(config_path)
         logger.info(f"No config.ini found: created sample at {os.path.abspath(config_path)}")
     except Exception as e:
@@ -140,6 +154,12 @@ try:
 except Exception:
     WEB_PORT = DEFAULT_WEB_PORT
 
+# Read default locale preference (normalize like 'en-US' -> 'en')
+try:
+    DEFAULT_LOCALE_RAW = cfg.get("SETTINGS", "default_locale", fallback="en").strip().lower().split("-")[0]
+except Exception:
+    DEFAULT_LOCALE_RAW = "en"
+
 try:
     HIDE_MAINT = cfg.get("SETTINGS", "hide_maintenance", fallback="no").lower() in ("1", "yes", "true")
 except Exception:
@@ -154,6 +174,7 @@ except Exception:
 # New: enable_restart config (default True)
 try:
     ENABLE_RESTART = cfg.getboolean("SETTINGS", "enable_restart", fallback=True)
+    logger.info(f"Service restart enabled: {ENABLE_RESTART}")
 except Exception:
     ENABLE_RESTART = True
 
@@ -166,27 +187,124 @@ try:
 except Exception:
     SERVICE_NAME = "FLEXnet License Server"
 
-logger.info(f"Config loaded: LMUTIL={LMUTIL_PATH}, PORT={LM_PORT}, WEB_PORT={WEB_PORT}, SERVICE={SERVICE_NAME}")
+# New Teams config read (defaults: disabled)
+try:
+    TEAMS_ENABLED = cfg.getboolean("TEAMS", "enabled", fallback=False)
+except Exception:
+    TEAMS_ENABLED = False
 
-# Cache
-_raw_output = ""
-_parsed = {}
-_last_update = 0.0
-_last_error = None
-_last_service_msg = None
-_lock = threading.Lock()
+try:
+    TEAMS_WEBHOOK = cfg.get("TEAMS", "webhook", fallback="", raw=True).strip()
+    # Remove surrounding quotes if present
+    if TEAMS_WEBHOOK.startswith('"') and TEAMS_WEBHOOK.endswith('"'):
+        TEAMS_WEBHOOK = TEAMS_WEBHOOK[1:-1].strip()
+    elif TEAMS_WEBHOOK.startswith("'") and TEAMS_WEBHOOK.endswith("'"):
+        TEAMS_WEBHOOK = TEAMS_WEBHOOK[1:-1].strip()
+    logger.debug(f"Teams webhook loaded (len={len(TEAMS_WEBHOOK)}): {TEAMS_WEBHOOK[:60]}..." if len(TEAMS_WEBHOOK) > 60 else f"Teams webhook loaded: '{TEAMS_WEBHOOK}'")
+except Exception as e:
+    TEAMS_WEBHOOK = ""
+    logger.debug(f"Teams webhook could not be loaded; exception: {e}")
 
-# Systray
-_systray = None
+try:
+    TEAMS_NOTIFY_UPDATE = cfg.getboolean("TEAMS", "notify_update", fallback=True)
+except Exception:
+    TEAMS_NOTIFY_UPDATE = True
+
+# Teams notification state (avoid duplicate notifications for same release)
+_LAST_TEAMS_NOTIFIED_VERSION = None
+
+def send_teams_notification(title, message, link=None):
+    locale = DEFAULT_LOCALE
+    """Send a message to Microsoft Teams webhook with Adaptive Card payload."""
+    logger.debug("send_teams_notification called: title=%s, link=%s", title, bool(link))
+    if not TEAMS_ENABLED:
+        logger.debug("Teams notifications disabled in config.")
+        return False
+    if not TEAMS_WEBHOOK:
+        logger.warning("Teams webhook URL not configured; cannot send Teams notification.")
+        return False
+
+    try:
+        import urllib.request
+        import urllib.error
+
+        # Build Adaptive Card payload for Power Automate
+        payload = {
+            "type": "message",
+            "attachments": [
+            {
+                "contentType": "application/vnd.microsoft.card.adaptive",
+                "content": {
+                "type": "AdaptiveCard",
+                "body": [
+                    {
+                    "type": "TextBlock",
+                    "size": "Medium",
+                    "weight": "Bolder",
+                    "text": title
+                    },
+                    {
+                    "type": "TextBlock",
+                    "text": message,
+                    "wrap": True
+                    }
+                ],
+                "actions": [
+                    {
+                    "type": "Action.OpenUrl",
+                    "title": TRANSLATIONS.get(locale, {}).get("view_details", "View Details"),
+                    "url": link
+                    }
+                ] if link else [],
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.2"
+                }
+            }
+            ]
+        }
+
+        data_bytes = json.dumps(payload).encode("utf-8")
+        masked_webhook = (TEAMS_WEBHOOK[:80] + "...") if len(TEAMS_WEBHOOK) > 80 else TEAMS_WEBHOOK
+        logger.debug("Prepared Teams Adaptive Card payload: %s", payload)
+        logger.debug("Posting to Teams webhook (masked)=%s", masked_webhook)
+        req = urllib.request.Request(
+            TEAMS_WEBHOOK,
+            data=data_bytes,
+            headers={"Content-Type": "application/json", "User-Agent": "Licenses-WebUI-Teams-Notifier"}
+        )
+        logger.debug("Sending HTTP POST via urllib (timeout=15s)...")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status = resp.getcode()
+            try:
+                body = resp.read().decode("utf-8", errors="replace")
+            except Exception:
+                body = "<could not read response body>"
+            logger.info("Teams notification sent: status=%s", status)
+            logger.debug("Teams response body: %s", body)
+            return 200 <= status < 300
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            err_body = "<no body>"
+        logger.warning("urllib HTTPError: status=%s, reason=%s, body=%s", e.code, e.reason, err_body)
+        return False
+    except urllib.error.URLError as e:
+        logger.warning("urllib URLError: %s", e.reason, exc_info=True)
+        return False
+    except Exception as e:
+        logger.warning("Failed to send Teams notification: %s", e, exc_info=True)
+        return False
+
 
 # ---------- Internationalization ----------
 
 SUPPORTED_LOCALES = ("en", "fr", "de", "es")
-DEFAULT_LOCALE = "en"
+DEFAULT_LOCALE = DEFAULT_LOCALE_RAW if 'DEFAULT_LOCALE_RAW' in globals() and DEFAULT_LOCALE_RAW in SUPPORTED_LOCALES else "en"
 TRANSLATIONS = {}
 
 # Application version and GitHub repo for update checks
-VERSION = "1.1"
+VERSION = "1.0"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 LATEST_VERSION = VERSION
@@ -197,8 +315,9 @@ LATEST_URL = f"https://github.com/{GITHUB_REPO}"
 UPDATE_CHECK_INTERVAL = 24 * 3600
 
 def check_github_latest_version():
-    """Check GitHub releases API for the latest version (runs in background)."""
-    global LATEST_VERSION, UPDATE_AVAILABLE, LATEST_URL
+    global LATEST_VERSION, UPDATE_AVAILABLE, LATEST_URL, _LAST_TEAMS_NOTIFIED_VERSION
+    # Do NOT use Flask request context here (runs in background thread)
+    locale = DEFAULT_LOCALE
     try:
         import urllib.request
         req = urllib.request.Request(
@@ -214,9 +333,41 @@ def check_github_latest_version():
                 LATEST_URL = data.get("html_url") or f"https://github.com/{GITHUB_REPO}"
                 UPDATE_AVAILABLE = (latest != VERSION)
                 logger.info(f"GitHub check: latest={latest}, current={VERSION}, update={UPDATE_AVAILABLE}")
+
+                # Debug: log Teams config/state before attempting notify
+                try:
+                    logger.debug("Teams config: enabled=%s, notify_update=%s, webhook_len=%s, last_notified=%s",
+                                 TEAMS_ENABLED, TEAMS_NOTIFY_UPDATE, len(TEAMS_WEBHOOK or ""), _LAST_TEAMS_NOTIFIED_VERSION)
+                except Exception:
+                    logger.debug("Teams config debug failed")
+
+                # Send Teams notification for new update (once per discovered version)
+                if UPDATE_AVAILABLE and TEAMS_ENABLED and TEAMS_NOTIFY_UPDATE:
+                    try:
+                        if _LAST_TEAMS_NOTIFIED_VERSION != latest:
+                            # craft a short message
+                            title = TRANSLATIONS.get(locale, {}).get("update_title", "Update available")
+                            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                                "update_message",
+                                "A new version is available: v{latest} (current: v{current})"
+                            )
+                            try:
+                                message = message_tpl.format(latest=latest, current=VERSION)
+                            except Exception:
+                                message = f"A new version is available: v{latest} (current: v{VERSION})"
+                            logger.debug("Attempting to send Teams notification for version %s", latest)
+                            sent = send_teams_notification(title, message, link=LATEST_URL)
+                            logger.debug("send_teams_notification returned: %s", sent)
+                            if sent:
+                                logger.info("Teams update notification sent for version %s", latest)
+                                _LAST_TEAMS_NOTIFIED_VERSION = latest
+                            else:
+                                logger.debug("Teams update notification NOT sent for version %s", latest)
+                    except Exception as e:
+                        logger.debug("Error while attempting to send Teams notification: %s", e, exc_info=True)
                 return
     except Exception as e:
-        logger.debug(f"GitHub version check failed: {e}")
+        logger.debug(f"GitHub version check failed: {e}", exc_info=True)
     logger.debug("GitHub version check finished with no usable release info.")
 
 def update_check_loop(interval=UPDATE_CHECK_INTERVAL):
@@ -791,6 +942,14 @@ def parse_lmstat(raw_text):
 
 # ---------- Background Refresh ----------
 
+_lock = threading.Lock()
+_raw_output = ""
+_parsed = {}
+_last_update = None
+_last_error = None
+_last_service_msg = None
+_systray = None
+
 def refresh_loop():
     """Background thread that periodically refreshes license data."""
     global _raw_output, _parsed, _last_update, _last_error
@@ -970,6 +1129,17 @@ def elevate_to_admin():
 
 if __name__ == "__main__":
     logger.info("Starting Licenses WebUI application...")
+    
+    # Check and elevate to admin FIRST to avoid duplicate background threads
+    # Only elevate to admin if restart functionality is enabled
+    if ENABLE_RESTART:
+        if not elevate_to_admin():
+            logger.error("This application requires administrator privileges to restart services.")
+            sys.exit(1)
+    else:
+        logger.info("Service restart disabled in config; skipping admin elevation")
+    
+    logger.info("Running with administrator privileges")
 
     # Start background update-check loop (immediate check + daily repeats)
     try:
@@ -977,13 +1147,6 @@ if __name__ == "__main__":
         t_ver.start()
     except Exception as e:
         logger.debug(f"Could not start update-check thread: {e}")
-
-    # Check and elevate to admin if needed
-    if not elevate_to_admin():
-        logger.error("This application requires administrator privileges to restart services.")
-        sys.exit(1)
-    
-    logger.info("Running with administrator privileges")
     
     # Perform initial sync fetch
     try:

@@ -22,5 +22,8 @@
   "fetch_error": "Fehler beim Abrufen",
   "close": "Schließen",
   "service_msg_title": "Service-Ausgabe",
-  "update_available": "Update verfügbar: v{version}"
+  "update_available": "Update verfügbar: v{version}",
+  "view_details": "Details anzeigen",
+  "update_message": "Eine neue Version ist verfügbar: v{latest} (aktuelle: v{current})",
+  "update_title": "Update verfügbar"
 }

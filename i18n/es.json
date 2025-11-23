@@ -22,5 +22,8 @@
   "fetch_error": "Error al obtener datos",
   "close": "Cerrar",
   "service_msg_title": "Salida del servicio",
-  "update_available": "Actualización disponible: v{version}"
+  "update_available": "Actualización disponible: v{version}",
+  "view_details": "Ver detalles",
+  "update_message": "Una nueva versión está disponible: v{latest} (actual: v{current})",
+  "update_title": "Actualización disponible"
 }

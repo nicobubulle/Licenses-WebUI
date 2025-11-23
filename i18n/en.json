@@ -22,5 +22,8 @@
   "fetch_error": "Fetch error",
   "close": "Close",
   "service_msg_title": "Service output",
-  "update_available": "Update available: v{version}"
+  "update_available": "Update available: v{version}",
+  "view_details": "View Details",
+  "update_message": "A new version is available: v{latest} (current: v{current})",
+  "update_title": "Update available"
 }
