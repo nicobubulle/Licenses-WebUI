@@ -31,5 +31,8 @@
   "soldout_message" : "Funktion **{feature}** ist vollständig genutzt ({used}/{total}).",
   "soldout_available_message" : "Funktion **{feature}** ist nicht mehr vollständig genutzt ({used}/{total}).",
   "duplicate_title": "Doppelte Lizenznutzung erkannt",
-  "duplicate_message": "**Funktion:** {feature}\n**Benutzer:** {user}\n**Computer:** {computer}\n**Anzahl der Nutzungen:** {count}"
+  "duplicate_message": "**Funktion:** {feature}\n**Benutzer:** {user}\n**Computer:** {computer}\n**Anzahl Checkouts:** {count}",
+  "footer_license": "MIT-Lizenz",
+  "footer_docs": "Dokumentation",
+  "footer_admin_mode": "Administrator-Modus"
 }

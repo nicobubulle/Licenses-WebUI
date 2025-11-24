@@ -149,6 +149,33 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <footer style="margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: 0.85em;">
+    <p style="margin: 8px 0;">
+      <strong>Licenses WebUI</strong> v{{ app_version }}
+      {% if update_available %}
+        — <a href="{{ latest_url }}" target="_blank" style="color: var(--primary); text-decoration: none; font-weight: 600;">{{ _('update_available', version=latest_version) }}</a>
+      {% endif %}
+    </p>
+    <p style="margin: 8px 0;">
+      &copy; 2025 
+      <a href="https://github.com/nicobubulle/Licenses-WebUI" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none;">
+        nicobubulle/Licenses-WebUI
+      </a>
+    </p>
+    <p style="margin: 8px 0;">
+      {{ _('footer_license') }} — 
+      <a href="https://github.com/nicobubulle/Licenses-WebUI/blob/main/README.md" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none;">{{ _('footer_docs') }}</a>
+      {% if show_restart %}
+        — {{ _('footer_admin_mode') }}
+      {% endif %}
+    </p>
+    <p style="margin: 12px 0 8px 0;">
+      <a href="https://buymeacoffee.com/nbullier" target="_blank" rel="noopener noreferrer">
+        <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 36px; width: auto; border-radius: 6px;">
+      </a>
+    </p>
+  </footer>
+
 <script>
 const REFRESH_MS = {{ refresh_minutes|tojson }} * 60 * 1000;
 const I18N = {{ i18n_json|safe }};

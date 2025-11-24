@@ -1,5 +1,7 @@
 # Licenses WebUI
 
+<a href="https://buymeacoffee.com/nbullier" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 145px !important;" ></a>
+
 FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and present license usage with an optional system tray and service restart support.
 
 ## Features

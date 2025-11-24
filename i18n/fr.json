@@ -31,5 +31,8 @@
   "soldout_message" : "La fonctionnalité **{feature}** est entièrement utilisée ({used}/{total}).",
   "soldout_available_message" : "La fonctionnalité **{feature}** n'est plus entièrement utilisée ({used}/{total}).",
   "duplicate_title": "Détection d'utilisation de licence en double",
-  "duplicate_message": "**Fonctionnalité:** {feature}\n**Utilisateur:** {user}\n**Ordinateur:** {computer}\n**Nombre d'utilisations:** {count}"
+  "duplicate_message": "**Fonctionnalité:** {feature}\n**Utilisateur:** {user}\n**Ordinateur:** {computer}\n**Nombre d'utilisations:** {count}",
+  "footer_license": "Licence MIT",
+  "footer_docs": "Documentation",
+  "footer_admin_mode": "Mode Administrateur"
 }
