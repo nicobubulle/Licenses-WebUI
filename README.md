@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="static/icon-192.png" alt="Licenses WebUI Logo" width="120" height="120">
+</div>
+
 # Licenses WebUI
 
 <a href="https://buymeacoffee.com/nbullier" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 40px !important;width: 145px !important;" ></a>
@@ -13,10 +17,11 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - Internationalization (i18n JSON files: en, fr, de, es) with query/cookie/header locale negotiation
 - Automatic GitHub release check (daily) + optional Teams update notification
 - Microsoft Teams notifications (Adaptive Card) for:
-   - New version available
-   - Duplicate license checkouts (same user@computer multiple times for a feature)
-   - Extended usage ("extratime" beyond configurable hours threshold, grouped per user)
-   - Sold-out feature transitions (becomes fully used / becomes available again)
+  - New version available
+  - Duplicate license checkouts (same user@computer multiple times for a feature)
+  - Extended usage ("extratime" beyond configurable hours threshold, grouped per user)
+  - Sold-out feature transitions (becomes fully used / becomes available again)
+  - Daemon status (license server down/up detection with service and port verification)
 - Maintenance filtering: optionally hide and suppress notifications for features containing `maint`
 - Additional hide filtering via substring list
 - Configurable via `config.ini`
@@ -51,6 +56,7 @@ See `TEAMS_SETUP.md` for full details.
 - `extratime_exclusion`: Comma-separated features to skip for extratime.
 - `notify_soldout`: Sold-out transition alerts.
 - `soldout_exclusion`: Comma-separated features to skip for sold-out.
+- `notify_daemon`: Daemon status notifications (license server down/up with verification).
 
 Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, extratime, and sold-out checkers immediately.
 
@@ -84,6 +90,7 @@ extratime_duration = 72
 extratime_exclusion = maint-test,temp-feature
 notify_soldout = yes
 soldout_exclusion = legacy,trial
+notify_daemon = yes
 ```
 
 ## Logs & Troubleshooting
@@ -109,6 +116,7 @@ Notification de-duplication rules:
 - Duplicate: once per (feature,user,computer) combination.
 - Extratime: once per (user,computer) after threshold; aggregates all exceeding features.
 - Sold-out: on state transitions (sold out -> available / available -> sold out).
+- Daemon: on state transitions (up -> down / down -> up), verified via service state and port connectivity.
 
 To test quickly:
 1. Set `enabled = yes` and supply webhook.

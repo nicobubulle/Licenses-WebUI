@@ -363,7 +363,7 @@ DEFAULT_LOCALE = DEFAULT_LOCALE_RAW if 'DEFAULT_LOCALE_RAW' in globals() and DEF
 TRANSLATIONS = {}
 
 # Application version and GitHub repo for update checks
-VERSION = "1.2"
+VERSION = "1.3"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 LATEST_VERSION = VERSION
