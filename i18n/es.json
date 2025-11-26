@@ -34,5 +34,11 @@
   "duplicate_message": "**Característica:** {feature}\n**Usuario:** {user}\n**Computadora:** {computer}\n**Cantidad de usos:** {count}",
   "footer_license": "Licencia MIT",
   "footer_docs": "Documentación",
-  "footer_admin_mode": "Modo Administrador"
+  "footer_admin_mode": "Modo Administrador",
+  "daemon_down_title": "Demonio de licencias caído",
+  "daemon_up_title": "Demonio de licencias nuevamente activo",
+  "daemon_down_message": "lmstat falló; el demonio parece CAÍDO.\nServicio: {service} -> {state} (código={code})\nPuerto {port} alcanzable: {port_ok}",
+  "daemon_up_message": "El demonio parece ACTIVO nuevamente.\nServicio: {service} -> {state} (código={code})\nPuerto {port} alcanzable: {port_ok}",
+  "yes": "sí",
+  "no": "no"
 }

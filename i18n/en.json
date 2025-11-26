@@ -34,5 +34,11 @@
   "duplicate_message": "**Feature:** {feature}\n**User:** {user}\n**Computer:** {computer}\n**Checkout count:** {count}",
   "footer_license": "MIT License",
   "footer_docs": "Documentation",
-  "footer_admin_mode": "Administrator Mode"
+  "footer_admin_mode": "Administrator Mode",
+  "daemon_down_title": "License Daemon Down",
+  "daemon_up_title": "License Daemon Up Again",
+  "daemon_down_message": "lmstat failed; daemon appears DOWN.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}",
+  "daemon_up_message": "Daemon appears UP again.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}",
+  "yes": "yes",
+  "no": "no"
 }

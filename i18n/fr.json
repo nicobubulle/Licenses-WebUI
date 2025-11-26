@@ -34,5 +34,11 @@
   "duplicate_message": "**Fonctionnalité:** {feature}\n**Utilisateur:** {user}\n**Ordinateur:** {computer}\n**Nombre d'utilisations:** {count}",
   "footer_license": "Licence MIT",
   "footer_docs": "Documentation",
-  "footer_admin_mode": "Mode Administrateur"
+  "footer_admin_mode": "Mode Administrateur",
+  "daemon_down_title": "Service de licence hors service",
+  "daemon_up_title": "Service de licence opérationnel à nouveau",
+  "daemon_down_message": "lmstat a échoué ; le service semble HORS SERVICE.\nService : {service} -> {state} (code={code})\nPort {port} joignable : {port_ok}",
+  "daemon_up_message": "Le service semble FONCTIONNEL à nouveau.\nService : {service} -> {state} (code={code})\nPort {port} joignable : {port_ok}",
+  "yes": "oui",
+  "no": "non"
 }

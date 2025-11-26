@@ -109,7 +109,7 @@ hide_maintenance = yes
 hide_list =
 
 # Enable the Restart service button (yes/no)
-enable_restart = yes
+enable_restart = no
 
 [SERVICE]
 # Windows service name to restart
@@ -123,7 +123,7 @@ enabled = no
 webhook =
 
 # Enable the "update available" notification (yes/no)
-notify_update = yes
+notify_update = no
 
 # Enable duplicate user checker notification (yes/no)
 notify_duplicate_checker = no
@@ -142,6 +142,9 @@ notify_soldout = no
 
 # Comma-separated list of features to exclude from sold-out notifications
 soldout_exclusion =
+
+# Enable daemon status notifications (yes/no)
+notify_daemon = no
 """
     try:
         with open(config_path, "w", encoding="utf-8") as f:
@@ -192,7 +195,7 @@ except Exception:
 
 # New: enable_restart config (default True)
 try:
-    ENABLE_RESTART = cfg.getboolean("SETTINGS", "enable_restart", fallback=True)
+    ENABLE_RESTART = cfg.getboolean("SETTINGS", "enable_restart", fallback=False)
     logger.info(f"Service restart enabled: {ENABLE_RESTART}")
 except Exception:
     ENABLE_RESTART = True
@@ -225,7 +228,7 @@ except Exception as e:
     logger.debug(f"Teams webhook could not be loaded; exception: {e}")
 
 try:
-    TEAMS_NOTIFY_UPDATE = cfg.getboolean("TEAMS", "notify_update", fallback=True)
+    TEAMS_NOTIFY_UPDATE = cfg.getboolean("TEAMS", "notify_update", fallback=False)
 except Exception:
     TEAMS_NOTIFY_UPDATE = True
 
@@ -260,6 +263,11 @@ try:
     TEAMS_SOLDOUT_EXCLUSION = [x.strip() for x in soldout_excl_str.split(",") if x.strip()]
 except Exception:
     TEAMS_SOLDOUT_EXCLUSION = []
+
+try:
+    TEAMS_NOTIFY_DAEMON = cfg.getboolean("TEAMS", "notify_daemon", fallback=False)
+except Exception:
+    TEAMS_NOTIFY_DAEMON = False
 
 # Teams notification state (avoid duplicate notifications for same release)
 _LAST_TEAMS_NOTIFIED_VERSION = None
@@ -901,8 +909,6 @@ def try_lmstat_commands():
 
     commands = [
         [LMUTIL_PATH, "lmstat", "-a", "-c", f"{LM_PORT}@localhost"],
-        [LMUTIL_PATH, "lmstat", "-a", "-c", f"localhost:{LM_PORT}"],
-        [LMUTIL_PATH, "lmstat", "-a"],
     ]
 
     last_err = None
@@ -1009,6 +1015,149 @@ _notified_extratime = set()
 
 # Sold-out checker state: last known sold-out status per feature
 _soldout_last_state = {}
+_daemon_last_state = None  # None unknown, True up, False down
+
+def _is_port_open(host: str, port: str | int, timeout: float = 2.0) -> bool:
+    """Best-effort TCP connect to check if license port is reachable."""
+    try:
+        import socket
+        p = int(port)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect((host, p))
+            return True
+    except Exception:
+        return False
+
+def _lmstat_output_indicates_ok(text: str) -> bool:
+    """Heuristic check: return False if lmstat output clearly indicates connection failure.
+    Looks for common FlexLM error strings such as "Cannot connect to license server system" or "Error getting status".
+    """
+    if not isinstance(text, str):
+        return False
+    t = text.lower()
+    patterns = (
+        "cannot connect to license server system",
+        "error getting status",
+        "no such host is known",
+        "connection refused",
+        "(-15",  # FlexLM cannot connect code
+    )
+    return not any(p in t for p in patterns)
+
+def check_daemon_state(current_up_hint: bool):
+    """Evaluate daemon up/down and notify on transitions.
+    If lmstat succeeded (current_up_hint=True), consider daemon up.
+    If lmstat failed, verify via service state and port connectivity before notifying down.
+    """
+    logger.debug(f"check_daemon_state called: current_up_hint={current_up_hint}, TEAMS_ENABLED={TEAMS_ENABLED}, TEAMS_NOTIFY_DAEMON={TEAMS_NOTIFY_DAEMON}")
+    if not (TEAMS_ENABLED and TEAMS_NOTIFY_DAEMON):
+        logger.debug("Daemon state check skipped (Teams not enabled or notify_daemon=no)")
+        return
+    global _daemon_last_state
+
+    # Determine current state
+    service_running = None
+    service_name = "UNKNOWN"
+    service_code = None
+    try:
+        code, name, _ = get_service_state(SERVICE_NAME)
+        service_running = (code == STATE_RUNNING) if code is not None else None
+        service_name = name or "UNKNOWN"
+        service_code = code
+    except Exception:
+        # leave as None
+        pass
+
+    port_ok = None
+    try:
+        port_ok = _is_port_open("localhost", LM_PORT, timeout=2.0)
+    except Exception:
+        pass
+
+    logger.debug(f"Daemon check inputs: service_running={service_running}, service_name={service_name}, service_code={service_code}, port_ok={port_ok}")
+
+    if current_up_hint:
+        # Even if lmstat looked ok, override to DOWN if service/port clearly indicate down
+        if service_running is False and port_ok is False:
+            current = False
+        elif service_running is False and port_ok is None:
+            current = False
+        elif port_ok is False and (service_running is None):
+            current = False
+        else:
+            current = True
+    else:
+        # Only declare down if both checks indicate down or unknown suggests down
+        # Conservative: require either explicit not-running AND port closed, else assume up/indeterminate
+        if service_running is False and port_ok is False:
+            current = False
+        elif service_running is False and port_ok is None:
+            current = False
+        elif port_ok is False and (service_running is None):
+            current = False
+        else:
+            current = bool(service_running or port_ok)
+
+    prev = _daemon_last_state
+    _daemon_last_state = current
+    
+    logger.debug(f"Daemon state determined: prev={prev}, current={current}")
+
+    locale = DEFAULT_LOCALE
+    yes_str = TRANSLATIONS.get(locale, {}).get("yes", "yes")
+    no_str = TRANSLATIONS.get(locale, {}).get("no", "no")
+    port_ok_str = yes_str if port_ok else no_str
+
+    if prev is None:
+        # First observation: notify if currently down
+        if current is False:
+            title = TRANSLATIONS.get(locale, {}).get("daemon_down_title", "License Daemon Down")
+            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                "daemon_down_message",
+                "lmstat failed; daemon appears DOWN.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}"
+            )
+            try:
+                message = message_tpl.format(service=SERVICE_NAME, state=service_name, code=service_code, port=LM_PORT, port_ok=port_ok_str)
+            except Exception:
+                message = (
+                    f"lmstat failed; daemon appears DOWN.\n"
+                    f"Service: {SERVICE_NAME} -> {service_name} (code={service_code})\n"
+                    f"Port {LM_PORT} reachable: {port_ok_str}"
+                )
+            try:
+                send_teams_notification(title, message)
+                logger.info("Daemon down notification sent (initial)")
+            except Exception as e:
+                logger.warning(f"Failed to send daemon down notification: {e}", exc_info=True)
+        return
+
+    if prev != current:
+        if current:
+            title = TRANSLATIONS.get(locale, {}).get("daemon_up_title", "License Daemon Up Again")
+            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                "daemon_up_message",
+                "Daemon appears UP again.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}"
+            )
+        else:
+            title = TRANSLATIONS.get(locale, {}).get("daemon_down_title", "License Daemon Down")
+            message_tpl = TRANSLATIONS.get(locale, {}).get(
+                "daemon_down_message",
+                "lmstat failed; daemon appears DOWN.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}"
+            )
+        try:
+            message = message_tpl.format(service=SERVICE_NAME, state=service_name, code=service_code, port=LM_PORT, port_ok=port_ok_str)
+        except Exception:
+            message = (
+                ("Daemon appears UP again.\n" if current else "lmstat failed; daemon appears DOWN.\n") +
+                f"Service: {SERVICE_NAME} -> {service_name} (code={service_code})\n" +
+                f"Port {LM_PORT} reachable: {port_ok_str}"
+            )
+        try:
+            send_teams_notification(title, message)
+            logger.info(f"Daemon state change notified: {'UP' if current else 'DOWN'}")
+        except Exception as e:
+            logger.warning(f"Failed to send daemon state notification: {e}", exc_info=True)
 
 def _parse_start_timestamp(start_str):
     """Best-effort parse of lmstat 'start' field into epoch seconds.
@@ -1244,6 +1393,13 @@ def refresh_loop():
                 _last_error = None
                 logger.info("License data refreshed successfully")
             
+            # Determine daemon hint based on lmstat output content
+            lmstat_ok = _lmstat_output_indicates_ok(out)
+            try:
+                check_daemon_state(bool(lmstat_ok))
+            except Exception:
+                pass
+            
             # Run duplicate checker after updating parsed data
             try:
                 check_duplicates(parsed)
@@ -1264,6 +1420,11 @@ def refresh_loop():
             with _lock:
                 _last_error = str(e)
             logger.error(f"Refresh failed: {e}", exc_info=True)
+            # Daemon might be down; verify and notify transitions
+            try:
+                check_daemon_state(False)
+            except Exception:
+                pass
         
         # Sleep in small intervals to respond quickly to shutdown
         for _ in range(REFRESH_MIN * 60):
@@ -1342,6 +1503,13 @@ def manual_refresh():
             _last_error = None
         logger.info("Manual refresh completed successfully")
 
+        # Determine daemon hint based on lmstat output content
+        lmstat_ok = _lmstat_output_indicates_ok(out)
+        try:
+            check_daemon_state(bool(lmstat_ok))
+        except Exception:
+            pass
+
         # Run same checkers as automatic loop
         try:
             check_duplicates(parsed)
@@ -1361,6 +1529,12 @@ def manual_refresh():
         with _lock:
             _last_error = str(e)
         logger.error(f"Manual refresh failed: {e}", exc_info=True)
+        # Daemon might be down; verify and notify transitions
+        logger.debug("Manual refresh exception handler: calling check_daemon_state(False)")
+        try:
+            check_daemon_state(False)
+        except Exception as ex:
+            logger.warning(f"check_daemon_state raised exception: {ex}", exc_info=True)
         return redirect(url_for("index"))
 
 

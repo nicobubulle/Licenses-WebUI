@@ -34,5 +34,11 @@
   "duplicate_message": "**Funktion:** {feature}\n**Benutzer:** {user}\n**Computer:** {computer}\n**Anzahl Checkouts:** {count}",
   "footer_license": "MIT-Lizenz",
   "footer_docs": "Dokumentation",
-  "footer_admin_mode": "Administrator-Modus"
+  "footer_admin_mode": "Administrator-Modus",
+  "daemon_down_title": "Lizenz-Daemon ausgefallen",
+  "daemon_up_title": "Lizenz-Daemon wieder verfügbar",
+  "daemon_down_message": "lmstat fehlgeschlagen; Daemon scheint AUS zu sein.\nDienst: {service} -> {state} (Code={code})\nPort {port} erreichbar: {port_ok}",
+  "daemon_up_message": "Daemon scheint wieder AKTIV zu sein.\nDienst: {service} -> {state} (Code={code})\nPort {port} erreichbar: {port_ok}",
+  "yes": "ja",
+  "no": "nein"
 }
