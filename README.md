@@ -14,6 +14,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - Raw output debug view (`/raw`)
 - Windows service restart with robust state checking (requires admin + enabled in config)
 - System tray integration (pystray + Pillow)
+- **Feature Grouping**: Organize licenses into collapsible categories with custom icons via `feature_groups.json` (supports exact names and wildcard patterns)
 - Internationalization (i18n JSON files: en, fr, de, es) with query/cookie/header locale negotiation
 - Automatic GitHub release check (daily) + optional Teams update notification
 - Microsoft Teams notifications (Adaptive Card) for:
@@ -66,6 +67,9 @@ Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, e
 - `/refresh` — POST to force synchronous refresh
 - `/restart` — POST to request service restart (admin + enable_restart required)
 - `/raw` — raw lmstat output for debugging
+
+## Feature Grouping
+Licenses are automatically organized into collapsible categories with custom icons for easier navigation. Groups are collapsed by default and can be toggled by clicking the header.
 
 ## Internationalization
 Translation files live in `i18n/` as JSON. Supported locales are loaded from `app.py` (DEFAULT_LOCALE and SUPPORTED_LOCALES). To add a language:
