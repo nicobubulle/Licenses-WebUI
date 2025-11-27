@@ -384,7 +384,7 @@ def load_feature_groups():
         FEATURE_GROUPS = {"groups": [], "other": {"title": "Other", "icon": "static/icons/other.png"}}
 
 # Application version and GitHub repo for update checks
-VERSION = "1.3"
+VERSION = "1.4"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 LATEST_VERSION = VERSION
