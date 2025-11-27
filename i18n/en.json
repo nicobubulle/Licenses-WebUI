@@ -11,7 +11,6 @@
   "no_users": "No users",
   "product": "Product",
   "usage": "Usage",
-  "expiration": "Expiration",
   "users_connected": "Connected users",
   "last_update": "Last update: {when}",
   "last_attempt": "Last attempt: {when}",

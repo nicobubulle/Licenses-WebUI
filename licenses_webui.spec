@@ -13,6 +13,7 @@ a = Analysis(
         ('templates', 'templates'),
         ('i18n', 'i18n'),
         ('static', 'static'),
+        ('feature_groups.json', '.'),
     ],
     hiddenimports=['flask', 'pystray', 'PIL'],
     hookspath=[],

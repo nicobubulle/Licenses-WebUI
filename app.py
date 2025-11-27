@@ -362,6 +362,27 @@ SUPPORTED_LOCALES = ("en", "fr", "de", "es")
 DEFAULT_LOCALE = DEFAULT_LOCALE_RAW if 'DEFAULT_LOCALE_RAW' in globals() and DEFAULT_LOCALE_RAW in SUPPORTED_LOCALES else "en"
 TRANSLATIONS = {}
 
+# Feature groups configuration
+FEATURE_GROUPS = {}
+
+def load_feature_groups():
+    """Load feature groups from feature_groups.json.
+    Supports both source-run and PyInstaller bundle via sys._MEIPASS.
+    """
+    global FEATURE_GROUPS
+    base_dir = getattr(sys, '_MEIPASS', None) or os.path.dirname(__file__)
+    groups_file = os.path.join(base_dir, "feature_groups.json")
+    try:
+        with open(groups_file, "r", encoding="utf-8") as f:
+            FEATURE_GROUPS = json.load(f)
+        logger.info(f"Loaded feature groups configuration from: {groups_file}")
+    except FileNotFoundError:
+        logger.warning(f"Feature groups file not found: {groups_file}")
+        FEATURE_GROUPS = {"groups": [], "other": {"title": "Other", "icon": "static/icons/other.png"}}
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in feature groups file: {e}")
+        FEATURE_GROUPS = {"groups": [], "other": {"title": "Other", "icon": "static/icons/other.png"}}
+
 # Application version and GitHub repo for update checks
 VERSION = "1.3"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
@@ -466,6 +487,7 @@ def load_translations():
             TRANSLATIONS[locale] = {}
 
 load_translations()
+load_feature_groups()
 
 def get_locale():
     """Get current locale from query param, cookie, or Accept-Language header."""
@@ -501,6 +523,7 @@ def inject_i18n():
     locale = get_locale()
     i18n = TRANSLATIONS.get(locale, TRANSLATIONS.get(DEFAULT_LOCALE, {}))
     i18n_json = json.dumps(i18n)
+    feature_groups_json = json.dumps(FEATURE_GROUPS)
     return dict(
         _=lambda k, **kw: translate(k, **kw),
         i18n=i18n,
@@ -509,7 +532,8 @@ def inject_i18n():
         app_version=VERSION,
         latest_version=LATEST_VERSION,
         update_available=UPDATE_AVAILABLE,
-        latest_url=LATEST_URL
+        latest_url=LATEST_URL,
+        feature_groups_json=feature_groups_json
     )
 
 # ---------- System Tray ----------

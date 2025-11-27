@@ -91,6 +91,44 @@
       padding:4px;
     }
 
+    /* Feature groups */
+    .group-header {
+      background: linear-gradient(180deg, #f0f0f0, #e8e8e8);
+      cursor: pointer;
+      font-weight: 700;
+      border-bottom: 2px solid var(--border);
+      user-select: none;
+      transition: background 0.2s;
+    }
+    .group-header-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+    }
+    .group-header:hover {
+      background: linear-gradient(180deg, #e8e8e8, #e0e0e0);
+    }
+    .group-icon {
+      width: 32px;
+      height: 32px;
+      object-fit: contain;
+    }
+    .group-toggle {
+      margin-left: auto;
+      transition: transform 0.2s;
+      font-size: 0.8em;
+    }
+    .group-toggle.collapsed {
+      transform: rotate(-90deg);
+    }
+    .group-content {
+      display: table-row;
+    }
+    .group-content.collapsed {
+      display: none;
+    }
+
     @media (max-width:720px){
       header { flex-direction:column; align-items:stretch; gap:10px; }
       .toolbar { justify-content:flex-start; flex-wrap:wrap; }
@@ -137,12 +175,11 @@
         <tr>
           <th>{{ _('product') }}</th>
           <th>{{ _('usage') }}</th>
-          <th>{{ _('expiration') }}</th>
           <th>{{ _('users_connected') }}</th>
         </tr>
       </thead>
       <tbody id="tbody">
-        <tr><td colspan="4">{{ _('loading') }}</td></tr>
+        <tr><td colspan="3">{{ _('loading') }}</td></tr>
       </tbody>
     </table>
   </div>
@@ -179,6 +216,29 @@
 <script>
 const REFRESH_MS = {{ refresh_minutes|tojson }} * 60 * 1000;
 const I18N = {{ i18n_json|safe }};
+const FEATURE_GROUPS = {{ feature_groups_json|safe }};
+
+// Build feature-to-group mapping (exact + wildcard "*")
+const exactFeatureToGroup = {};
+const wildcardPatterns = [];
+if (FEATURE_GROUPS.groups) {
+  FEATURE_GROUPS.groups.forEach(g => {
+    if (g.features) {
+      g.features.forEach(f => {
+        const fl = String(f).toLowerCase();
+        if (fl.includes('*')) {
+          // Store wildcard pattern for later matching
+          wildcardPatterns.push({ pattern: fl, groupId: g.id });
+        } else {
+          exactFeatureToGroup[fl] = g.id;
+        }
+      });
+    }
+  });
+}
+
+// Track collapsed state: start collapsed by default
+const collapsedGroups = new Set((FEATURE_GROUPS.groups || []).map(g => g.id).concat(['other']));
 
 function t(key, vars){
   const v = I18N[key] || key;
@@ -204,6 +264,37 @@ function showToast(text, timeout=4000){
   toast._t = setTimeout(()=> toast.style.display = "none", timeout);
 }
 
+function toggleGroup(groupId) {
+  const rows = document.querySelectorAll(`.group-${groupId}`);
+  const toggle = document.getElementById(`group-toggle-${groupId}`);
+  const isCollapsed = collapsedGroups.has(groupId);
+  if (isCollapsed) {
+    collapsedGroups.delete(groupId);
+    rows.forEach(r => r.classList.remove('collapsed'));
+    if (toggle) toggle.classList.remove('collapsed');
+  } else {
+    collapsedGroups.add(groupId);
+    rows.forEach(r => r.classList.add('collapsed'));
+    if (toggle) toggle.classList.add('collapsed');
+  }
+}
+
+function getGroupForFeature(featureName) {
+  const lname = String(featureName).toLowerCase();
+  // Exact match first
+  if (exactFeatureToGroup[lname]) {
+    return exactFeatureToGroup[lname];
+  }
+  // Wildcard match: * can appear anywhere, matches any chars
+  for (const { pattern, groupId } of wildcardPatterns) {
+    const regex = new RegExp('^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
+    if (regex.test(lname)) {
+      return groupId;
+    }
+  }
+  return 'other';
+}
+
 async function fetchStatus(){
   try {
     const r = await fetch(statusUrl);
@@ -221,32 +312,67 @@ async function fetchStatus(){
     }
 
     const licenses = data.licenses || {};
+    
+    // Group licenses
+    const grouped = {};
+    FEATURE_GROUPS.groups.forEach(g => {
+      grouped[g.id] = { group: g, features: [] };
+    });
+    grouped['other'] = { group: FEATURE_GROUPS.other || {title: 'Other', icon: 'static/icons/other.png'}, features: [] };
+
+    Object.keys(licenses).sort().forEach(name => {
+      const groupId = getGroupForFeature(name);
+      if (grouped[groupId]) {
+        grouped[groupId].features.push({name, data: licenses[name]});
+      } else {
+        grouped['other'].features.push({name, data: licenses[name]});
+      }
+    });
+
     let html = "";
-    const names = Object.keys(licenses).sort();
-    if (names.length === 0) {
+    const allGroupIds = [...FEATURE_GROUPS.groups.map(g => g.id), 'other'];
+    
+    if (Object.keys(licenses).length === 0) {
       html = `<tr><td colspan='4'>${t('no_licenses')}</td></tr>`;
     } else {
-      for (const name of names) {
-        const item = licenses[name] || {};
-        const total = (item.total === null || item.total === undefined) ? "?" : item.total;
-        const used = (item.used === null || item.used === undefined) ? (item.users ? item.users.length : 0) : item.used;
-        const usage = `${used}/${total}`;
-        const expiry = item.expiry || "";
-        let usersHtml = "";
-        if (item.users && item.users.length>0) {
-          for (const u of item.users) {
-            usersHtml += `<div class="user-line">${u.user} @ ${u.computer} — v${u.version} — ${u.start}</div>`;
-          }
-        } else {
-          usersHtml = `<div class='small'>${t('no_users')}</div>`;
-        }
-
-        html += `<tr>
-                  <td><strong>${name}</strong></td>
-                  <td>${usage}</td>
-                  <td>${expiry}</td>
-                  <td class="users">${usersHtml}</td>
+      for (const groupId of allGroupIds) {
+        const groupData = grouped[groupId];
+        if (!groupData || groupData.features.length === 0) continue;
+        
+        const grp = groupData.group;
+        const isCollapsed = collapsedGroups.has(groupId);
+        
+        html += `<tr class="group-header" onclick="toggleGroup('${groupId}')">
+                  <td colspan="3">
+                    <div class="group-header-content">
+                      <img src="${grp.icon || 'static/icons/other.png'}" class="group-icon" alt="${grp.title}" />
+                      <span>${grp.title || groupId}</span>
+                      <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" id="group-toggle-${groupId}">▼</span>
+                    </div>
+                  </td>
                 </tr>`;
+        
+        for (const {name, data: item} of groupData.features) {
+          const total = (item.total === null || item.total === undefined) ? "?" : item.total;
+          const used = (item.used === null || item.used === undefined) ? (item.users ? item.users.length : 0) : item.used;
+          const usage = `${used}/${total}`;
+          const expiry = item.expiry || "";
+          let usersHtml = "";
+          if (item.users && item.users.length>0) {
+            for (const u of item.users) {
+              usersHtml += `<div class="user-line">${u.user} @ ${u.computer} — v${u.version} — ${u.start}</div>`;
+            }
+          } else {
+            usersHtml = `<div class='small'>${t('no_users')}</div>`;
+          }
+
+          html += `<tr class="group-content group-${groupId} ${isCollapsed ? 'collapsed' : ''}">
+                    <td><strong>${name}</strong></td>
+                    <td>${usage}</td>
+                    <td class="users">${usersHtml}</td>
+                  </tr>`;
+        }
+        
       }
     }
 

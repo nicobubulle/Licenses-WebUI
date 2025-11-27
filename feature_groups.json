@@ -1,0 +1,63 @@
+{
+  "groups": [
+    {
+      "id": "cr360",
+      "title": "Cyclone REGISTER 360 Plus",
+      "icon": "static/icons/cr360.png",
+      "features": [
+        "TLS_CYCL.Register360"
+      ]
+    },
+    {
+      "id": "cr360blk",
+      "title": "Cyclone REGISTER 360 Plus BLK Edition",
+      "icon": "static/icons/cr360blk.png",
+      "features": [
+        "TLS_CYCL.Register360BLK"
+      ]
+    },
+    {
+      "id": "pegasuso",
+      "title": "Cyclone PEGASUS Office",
+      "icon": "static/icons/pegasuso.png",
+      "features": [
+        "RC_CyclonePEGASUS"
+      ]
+    },
+    {
+      "id": "c3dr",
+      "title": "Cyclone 3DR",
+      "icon": "static/icons/c3dr.png",
+      "features": [
+        "TLS_CYCL.3DR*"
+      ]
+    },
+    {
+      "id": "pinpoint",
+      "title": "Pinpoint",
+      "icon": "static/icons/pinpoint.png",
+      "features": [
+        "PinPoint*"
+      ]
+    },
+    {
+      "id": "infinity",
+      "title": "Infinity",
+      "icon": "static/icons/infinity.png",
+      "features": [
+        "Infinity*"
+      ]},
+    {    
+      "id": "cwrx",
+      "title": "Cloudworx",
+      "icon": "static/icons/cwrx.png",
+      "features": [
+        "*CLWRX*"
+      ]
+    }
+  ],
+  "other": {
+    "title": "Other",
+    "icon": "static/icons/other.png"
+  }
+}
