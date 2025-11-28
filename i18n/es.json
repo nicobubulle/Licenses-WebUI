@@ -39,5 +39,19 @@
   "daemon_down_message": "lmstat falló; el demonio parece CAÍDO.\nServicio: {service} -> {state} (código={code})\nPuerto {port} alcanzable: {port_ok}",
   "daemon_up_message": "El demonio parece ACTIVO nuevamente.\nServicio: {service} -> {state} (código={code})\nPuerto {port} alcanzable: {port_ok}",
   "yes": "sí",
-  "no": "no"
+  "no": "no",
+  "statistics": "Estadísticas",
+  "view_statistics": "Ver estadísticas",
+  "stats_title": "Estadísticas de uso de licencias",
+  "back_to_dashboard": "Volver al panel",
+  "feature_label": "Función",
+  "time_range": "Intervalo de tiempo",
+  "all_features": "Todas las funciones",
+  "last_hour": "Última hora",
+  "last_6_hours": "Últimas 6 horas",
+  "last_24_hours": "Últimas 24 horas",
+  "last_7_days": "Últimos 7 días",
+  "last_30_days": "Últimos 30 días",
+  "time": "Tiempo",
+  "license_count": "Cantidad de licencias"
 }

@@ -39,5 +39,19 @@
   "daemon_down_message": "lmstat fehlgeschlagen; Daemon scheint AUS zu sein.\nDienst: {service} -> {state} (Code={code})\nPort {port} erreichbar: {port_ok}",
   "daemon_up_message": "Daemon scheint wieder AKTIV zu sein.\nDienst: {service} -> {state} (Code={code})\nPort {port} erreichbar: {port_ok}",
   "yes": "ja",
-  "no": "nein"
+  "no": "nein",
+  "statistics": "Statistiken",
+  "view_statistics": "Statistiken anzeigen",
+  "stats_title": "Statistiken zur Lizenznutzung",
+  "back_to_dashboard": "Zurück zum Dashboard",
+  "feature_label": "Funktion",
+  "time_range": "Zeitraum",
+  "all_features": "Alle Funktionen",
+  "last_hour": "Letzte Stunde",
+  "last_6_hours": "Letzte 6 Stunden",
+  "last_24_hours": "Letzte 24 Stunden",
+  "last_7_days": "Letzte 7 Tage",
+  "last_30_days": "Letzte 30 Tage",
+  "time": "Zeit",
+  "license_count": "Anzahl Lizenzen"
 }

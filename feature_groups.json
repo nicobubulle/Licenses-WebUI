@@ -5,7 +5,8 @@
       "title": "Cyclone REGISTER 360 Plus",
       "icon": "static/icons/cr360.png",
       "features": [
-        "TLS_CYCL.Register360"
+        "TLS_CYCL.Register360",
+        "TLS_CYCL.Register"
       ]
     },
     {

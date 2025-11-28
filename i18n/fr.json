@@ -39,5 +39,19 @@
   "daemon_down_message": "lmstat a échoué ; le service semble HORS SERVICE.\nService : {service} -> {state} (code={code})\nPort {port} joignable : {port_ok}",
   "daemon_up_message": "Le service semble FONCTIONNEL à nouveau.\nService : {service} -> {state} (code={code})\nPort {port} joignable : {port_ok}",
   "yes": "oui",
-  "no": "non"
+  "no": "non",
+  "statistics": "Statistiques",
+  "view_statistics": "Voir les statistiques",
+  "stats_title": "Statistiques d’utilisation des licences",
+  "back_to_dashboard": "Retour au tableau de bord",
+  "feature_label": "Fonctionnalité",
+  "time_range": "Période",
+  "all_features": "Toutes les fonctionnalités",
+  "last_hour": "Dernière heure",
+  "last_6_hours": "Dernières 6 heures",
+  "last_24_hours": "Dernières 24 heures",
+  "last_7_days": "Derniers 7 jours",
+  "last_30_days": "Derniers 30 jours",
+  "time": "Heure",
+  "license_count": "Nombre de licences"
 }

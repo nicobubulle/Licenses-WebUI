@@ -11,6 +11,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 ## Features
 - Periodic background refresh of lmstat output
 - Manual refresh (runs same parsing + notification checkers as background loop)
+- **Statistics Dashboard**: Track and visualize license usage over time with interactive graphs (SQLite storage)
 - Raw output debug view (`/raw`)
 - Windows service restart with robust state checking (requires admin + enabled in config)
 - System tray integration (pystray + Pillow)
@@ -32,6 +33,19 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 2. Edit `config.ini` as needed (see below). Restart app after changing values.
 3. Browser auto-opens at `http://localhost:<web_port>`.
 4. Optional: configure Teams notifications (see `TEAMS_SETUP.md`).
+
+### Run at Windows Startup (Optional)
+To automatically launch the application when Windows starts:
+
+1. Press `Win + R`, type `shell:startup`, and press Enter
+2. Create a shortcut to `Licenses_WebUI.exe` in the opened Startup folder
+3. Right-click the shortcut → Properties → Set "Run" to "Minimized" (optional)
+
+Alternatively, use Task Scheduler for more control:
+```powershell
+# Create a scheduled task to run at logon
+schtasks /create /tn "Licenses WebUI" /tr "C:\path\to\Licenses_WebUI.exe" /sc onlogon /rl highest
+```
 
 ### Core `config.ini` keys (SETTINGS section)
 - `lmutil_path`: Full path to `lmutil.exe` (default points to Leica folder).
@@ -67,6 +81,21 @@ Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, e
 - `/refresh` — POST to force synchronous refresh
 - `/restart` — POST to request service restart (admin + enable_restart required)
 - `/raw` — raw lmstat output for debugging
+- `/stats` — statistics dashboard with interactive graphs
+- `/api/stats` — JSON API for time-series data (query params: `feature`, `hours`)
+
+## Statistics Dashboard
+The application automatically tracks license usage changes in a SQLite database (`license_stats.db`) and provides an interactive statistics dashboard at `/stats`.
+
+**Features:**
+- Time-series graphs showing used vs. available licenses over time
+- Filter by specific feature or view all features
+- Configurable time ranges (1 hour to 30 days)
+- Auto-refresh every 5 minutes
+- Storage only occurs when usage values change (efficient storage)
+- Respects `hide_maintenance` and `hide_list` settings
+
+Access the dashboard via the "📊 Statistics" button in the main UI toolbar.
 
 ## Feature Grouping
 Licenses are automatically organized into collapsible categories with custom icons for easier navigation. Groups are collapsed by default and can be toggled by clicking the header.

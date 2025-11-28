@@ -7,6 +7,7 @@ import subprocess
 import configparser
 import logging
 import json
+import sqlite3
 from flask import Flask, render_template, jsonify, redirect, url_for, request, make_response
 import ctypes
 import sys
@@ -383,6 +384,91 @@ def load_feature_groups():
         logger.error(f"Invalid JSON in feature groups file: {e}")
         FEATURE_GROUPS = {"groups": [], "other": {"title": "Other", "icon": "static/icons/other.png"}}
 
+# ---------- Statistics Database ----------
+# Database stored next to executable, not in package
+def get_db_path():
+    """Get database path next to executable (like config.ini)."""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        base_dir = os.path.dirname(__file__)
+    return os.path.join(base_dir, "license_stats.db")
+
+DB_PATH = get_db_path()
+_stats_last_state = {}  # Track last stored state per feature to detect changes
+
+def init_stats_db():
+    """Initialize SQLite database for statistics tracking.
+    Creates database next to executable if it doesn't exist.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feature_usage (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp INTEGER NOT NULL,
+                feature_name TEXT NOT NULL,
+                used INTEGER NOT NULL,
+                available INTEGER NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_feature_timestamp 
+            ON feature_usage(feature_name, timestamp)
+        """)
+        conn.commit()
+        conn.close()
+        logger.info(f"Stats database initialized at: {os.path.abspath(DB_PATH)}")
+    except Exception as e:
+        logger.error(f"Failed to initialize stats database: {e}")
+
+def store_feature_stats(licenses_data):
+    """Store feature usage stats only when values change.
+    Respects HIDE_MAINT and HIDE_LIST exclusions.
+    """
+    global _stats_last_state
+    try:
+        timestamp = int(time.time())
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        for feature_name, data in licenses_data.items():
+            lname = feature_name.lower()
+            
+            # Skip maintenance features if configured
+            if HIDE_MAINT and 'maint' in lname:
+                continue
+            
+            # Skip features in hide list
+            if any(h.lower() in lname for h in HIDE_LIST):
+                continue
+            
+            used = data.get('used')
+            total = data.get('total')
+            
+            # Skip if missing data
+            if used is None or total is None:
+                continue
+            
+            # Check if state changed
+            last_state = _stats_last_state.get(feature_name)
+            current_state = (used, total)
+            
+            if last_state != current_state:
+                cursor.execute(
+                    "INSERT INTO feature_usage (timestamp, feature_name, used, available) VALUES (?, ?, ?, ?)",
+                    (timestamp, feature_name, used, total)
+                )
+                _stats_last_state[feature_name] = current_state
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.error(f"Failed to store feature stats: {e}")
+
 # Application version and GitHub repo for update checks
 VERSION = "1.4"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
@@ -488,6 +574,7 @@ def load_translations():
 
 load_translations()
 load_feature_groups()
+init_stats_db()
 
 def get_locale():
     """Get current locale from query param, cookie, or Accept-Language header."""
@@ -1417,6 +1504,12 @@ def refresh_loop():
                 _last_error = None
                 logger.info("License data refreshed successfully")
             
+            # Store statistics for changed features
+            try:
+                store_feature_stats(parsed)
+            except Exception as e:
+                logger.warning(f"Stats storage failed: {e}", exc_info=True)
+            
             # Determine daemon hint based on lmstat output content
             lmstat_ok = _lmstat_output_indicates_ok(out)
             try:
@@ -1527,6 +1620,8 @@ def manual_refresh():
             _last_error = None
         logger.info("Manual refresh completed successfully")
 
+        # Note: Do NOT store stats on manual refresh, only on automatic loop
+
         # Determine daemon hint based on lmstat output content
         lmstat_ok = _lmstat_output_indicates_ok(out)
         try:
@@ -1567,6 +1662,80 @@ def raw():
     """Debug route to view raw lmstat output."""
     with _lock:
         return f"<pre>{_raw_output.replace('<', '&lt;')}</pre>"
+
+
+@app.route("/stats")
+def stats():
+    """Statistics page with usage graphs."""
+    try:
+        has_admin = is_admin()
+    except Exception:
+        has_admin = False
+    
+    return render_template(
+        "stats.html",
+        show_restart=ENABLE_RESTART and has_admin,
+        refresh_minutes=REFRESH_MIN,
+        app_version=VERSION,
+        update_available=UPDATE_AVAILABLE,
+        latest_version=LATEST_VERSION,
+        latest_url=LATEST_URL
+    )
+
+
+@app.route("/api/stats")
+def api_stats():
+    """API endpoint to get time-series data for charts.
+    Query params:
+    - feature: feature name (optional, returns all if not specified)
+    - hours: time window in hours (default 24)
+    """
+    feature_filter = request.args.get('feature')
+    hours = int(request.args.get('hours', 24))
+    
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        cutoff_time = int(time.time()) - (hours * 3600)
+        
+        if feature_filter:
+            cursor.execute("""
+                SELECT timestamp, feature_name, used, available
+                FROM feature_usage
+                WHERE feature_name = ? AND timestamp >= ?
+                ORDER BY timestamp ASC
+            """, (feature_filter, cutoff_time))
+        else:
+            cursor.execute("""
+                SELECT timestamp, feature_name, used, available
+                FROM feature_usage
+                WHERE timestamp >= ?
+                ORDER BY feature_name, timestamp ASC
+            """, (cutoff_time,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Group by feature
+        data_by_feature = {}
+        for ts, fname, used, available in rows:
+            if fname not in data_by_feature:
+                data_by_feature[fname] = []
+            data_by_feature[fname].append({
+                'timestamp': ts,
+                'used': used,
+                'available': available
+            })
+        
+        return jsonify({
+            'ok': True,
+            'features': data_by_feature
+        })
+    
+    except Exception as e:
+        logger.error(f"Stats API error: {e}", exc_info=True)
+        return jsonify({'ok': False, 'error': str(e)})
 
 
 @app.route("/restart", methods=["POST"])

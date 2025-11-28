@@ -39,5 +39,19 @@
   "daemon_down_message": "lmstat failed; daemon appears DOWN.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}",
   "daemon_up_message": "Daemon appears UP again.\nService: {service} -> {state} (code={code})\nPort {port} reachable: {port_ok}",
   "yes": "yes",
-  "no": "no"
+  "no": "no",
+  "statistics": "Statistics",
+  "view_statistics": "View Statistics",
+  "stats_title": "License Usage Statistics",
+  "back_to_dashboard": "Back to Dashboard",
+  "feature_label": "Feature",
+  "time_range": "Time Range",
+  "all_features": "All Features",
+  "last_hour": "Last Hour",
+  "last_6_hours": "Last 6 Hours",
+  "last_24_hours": "Last 24 Hours",
+  "last_7_days": "Last 7 Days",
+  "last_30_days": "Last 30 Days",
+  "time": "Time",
+  "license_count": "License Count"
 }

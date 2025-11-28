@@ -38,7 +38,7 @@
     /* Toolbar */
     .toolbar { display:flex; gap:8px; align-items:center; }
     .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-weight:600; }
-    .btn svg { width:16px; height:16px; display:block; }
+    .btn svg, .btn img { width:16px; height:16px; display:block; }
     .btn:disabled { opacity:0.6; cursor:not-allowed; }
     .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-danger { background: linear-gradient(180deg,var(--danger),#b02a37); color:#fff; border-color:rgba(0,0,0,0.08); }
@@ -161,6 +161,11 @@
         {{ _('restart_label') }}
       </button>
       {% endif %}
+
+      <a href="{{ url_for('stats') }}" class="btn btn-ghost" title="{{ _('view_statistics') }}" aria-label="{{ _('view_statistics') }}">
+        <img src="{{ url_for('static', filename='graph.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+        <span>{{ _('statistics') }}</span>
+      </a>
     </div>
   </header>
 
