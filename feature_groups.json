@@ -18,6 +18,14 @@
       ]
     },
     {
+      "id": "workflow",
+      "title": "Cyclone WORKFLOW",
+      "icon": "static/icons/workflow.png",
+      "features": [
+        "TLS_CYCL.PublisherPro"
+      ]
+    },
+    {
       "id": "pegasuso",
       "title": "Cyclone PEGASUS Office",
       "icon": "static/icons/pegasuso.png",
