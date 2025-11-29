@@ -50,8 +50,11 @@
   "last_hour": "Last Hour",
   "last_6_hours": "Last 6 Hours",
   "last_24_hours": "Last 24 Hours",
+  "today": "Today",
   "last_7_days": "Last 7 Days",
   "last_30_days": "Last 30 Days",
+  "previous_day": "Previous Day",
+  "next_day": "Next Day",
   "time": "Time",
   "license_count": "License Count"
 }

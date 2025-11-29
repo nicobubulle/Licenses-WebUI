@@ -453,15 +453,18 @@ def store_feature_stats(licenses_data):
             if used is None or total is None:
                 continue
             
-            # Check if state changed
+            # Get the last known state for this feature
             last_state = _stats_last_state.get(feature_name)
             current_state = (used, total)
             
+            # Only store when state changes
             if last_state != current_state:
+                # Insert the current state at current timestamp
                 cursor.execute(
                     "INSERT INTO feature_usage (timestamp, feature_name, used, available) VALUES (?, ?, ?, ?)",
                     (timestamp, feature_name, used, total)
                 )
+                # Update the tracked state
                 _stats_last_state[feature_name] = current_state
         
         conn.commit()
@@ -1688,36 +1691,55 @@ def api_stats():
     """API endpoint to get time-series data for charts.
     Query params:
     - feature: feature name (optional, returns all if not specified)
-    - hours: time window in hours (default 24)
+    - hours: time window in hours (default 24) OR
+    - start: start timestamp (unix seconds) with end for absolute range
+    - end: end timestamp (unix seconds) with start for absolute range
     """
     feature_filter = request.args.get('feature')
-    hours = int(request.args.get('hours', 24))
+    
+    # Support both relative (hours) and absolute (start/end) time ranges
+    start_param = request.args.get('start')
+    end_param = request.args.get('end')
+    
+    if start_param and end_param:
+        # Absolute time range
+        cutoff_time = int(start_param)
+        end_time = int(end_param)
+    else:
+        # Relative time range (hours from now)
+        hours = int(request.args.get('hours', 24))
+        end_time = int(time.time())
+        cutoff_time = end_time - (hours * 3600)
     
     try:
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         
-        cutoff_time = int(time.time()) - (hours * 3600)
+        # Calculate backfill time for step transitions
+        try:
+            backfill_secs = int(REFRESH_MIN) * 60 if isinstance(REFRESH_MIN, (int, float)) else 300
+        except Exception:
+            backfill_secs = 300
         
         if feature_filter:
             cursor.execute("""
                 SELECT timestamp, feature_name, used, available
                 FROM feature_usage
-                WHERE feature_name = ? AND timestamp >= ?
+                WHERE feature_name = ? AND timestamp <= ?
                 ORDER BY timestamp ASC
-            """, (feature_filter, cutoff_time))
+            """, (feature_filter, end_time))
         else:
             cursor.execute("""
                 SELECT timestamp, feature_name, used, available
                 FROM feature_usage
-                WHERE timestamp >= ?
+                WHERE timestamp <= ?
                 ORDER BY feature_name, timestamp ASC
-            """, (cutoff_time,))
+            """, (end_time,))
         
         rows = cursor.fetchall()
         conn.close()
         
-        # Group by feature
+        # Process data to add backfill points for step transitions
         data_by_feature = {}
         for ts, fname, used, available in rows:
             if fname not in data_by_feature:
@@ -1728,9 +1750,35 @@ def api_stats():
                 'available': available
             })
         
+        # Add backfill points: for each feature, insert previous value at REFRESH_MIN before each change
+        enhanced_data = {}
+        for fname, points in data_by_feature.items():
+            enhanced_points = []
+            for i, point in enumerate(points):
+                # Add backfill point before this point (except for the first point)
+                if i > 0:
+                    prev_point = points[i - 1]
+                    # Add previous value at REFRESH_MIN before current timestamp
+                    backfill_ts = point['timestamp'] - backfill_secs
+                    # Only add backfill if it's after the previous real point
+                    if backfill_ts > prev_point['timestamp']:
+                        enhanced_points.append({
+                            'timestamp': backfill_ts,
+                            'used': prev_point['used'],
+                            'available': prev_point['available']
+                        })
+                
+                # Add the actual point
+                enhanced_points.append(point)
+            
+            # Filter to requested time range
+            filtered_points = [p for p in enhanced_points if cutoff_time <= p['timestamp'] <= end_time]
+            if filtered_points:
+                enhanced_data[fname] = filtered_points
+        
         return jsonify({
             'ok': True,
-            'features': data_by_feature
+            'features': enhanced_data
         })
     
     except Exception as e:

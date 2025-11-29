@@ -50,8 +50,11 @@
   "last_hour": "Dernière heure",
   "last_6_hours": "Dernières 6 heures",
   "last_24_hours": "Dernières 24 heures",
+  "today": "Aujourd'hui",
   "last_7_days": "Derniers 7 jours",
   "last_30_days": "Derniers 30 jours",
+  "previous_day": "Jour précédent",
+  "next_day": "Jour suivant",
   "time": "Heure",
   "license_count": "Nombre de licences"
 }
