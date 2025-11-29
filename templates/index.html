@@ -105,6 +105,7 @@
       align-items: center;
       gap: 8px;
       padding: 12px;
+      position: relative;
     }
     .group-header:hover {
       background: linear-gradient(180deg, #e8e8e8, #e0e0e0);
@@ -127,6 +128,111 @@
     }
     .group-content.collapsed {
       display: none;
+    }
+    
+    /* EID display */
+    .eid-count {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.9em;
+      color: var(--muted);
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .eid-info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0078d4, #005a9e);
+      color: white;
+      font-size: 13px;
+      font-weight: 600;
+      font-style: italic;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 4px rgba(0, 120, 212, 0.3);
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      line-height: 1;
+      padding-bottom: 1px;
+    }
+    .eid-info-icon:hover {
+      background: linear-gradient(135deg, #005a9e, #004578);
+      box-shadow: 0 3px 8px rgba(0, 120, 212, 0.5);
+      transform: scale(1.1);
+    }
+    
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 1000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.show {
+      display: flex;
+    }
+    .modal-content {
+      background: white;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 600px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .modal-header h2 {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+    .modal-close {
+      background: transparent;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: var(--muted);
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-close:hover {
+      color: #000;
+    }
+    .eid-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .eid-list li {
+      padding: 8px;
+      margin: 4px 0;
+      background: var(--card);
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 0.95em;
     }
 
     @media (max-width:720px){
@@ -191,7 +297,23 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <!-- EID Modal -->
+  <div id="eid-modal" class="modal" onclick="if(event.target===this) closeEidModal()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="eid-modal-title">EID List</h2>
+        <button class="modal-close" onclick="closeEidModal()" aria-label="{{ _('close') }}">&times;</button>
+      </div>
+      <ul id="eid-modal-list" class="eid-list"></ul>
+    </div>
+  </div>
+
   <footer style="margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: 0.85em;">
+    <p style="margin: 8px 0;">
+      <button id="btn-refresh-eid" class="btn btn-ghost" style="font-size: 0.9em;">
+        <span id="btn-refresh-eid-label">{{ _('refresh_eid_label') }}</span>
+      </button>
+    </p>
     <p style="margin: 8px 0;">
       <strong>Licenses WebUI</strong> v{{ app_version }}
       {% if update_available %}
@@ -254,13 +376,17 @@ function t(key, vars){
 const statusUrl = "/status";
 const refreshUrl = "/refresh";
 const restartUrl = "/restart";
+const refreshEidUrl = "/refresh-eid";
 
 const btnRefresh = document.getElementById("btn-refresh");
 const btnRefreshLabel = document.getElementById("btn-refresh-label");
 const btnRestart = document.getElementById("btn-restart");
+const btnRefreshEid = document.getElementById("btn-refresh-eid");
+const btnRefreshEidLabel = document.getElementById("btn-refresh-eid-label");
 const toast = document.getElementById("toast");
 
 let refreshing = false;
+let refreshingEid = false;
 
 function showToast(text, timeout=4000){
   toast.textContent = text;
@@ -282,6 +408,24 @@ function toggleGroup(groupId) {
     rows.forEach(r => r.classList.add('collapsed'));
     if (toggle) toggle.classList.add('collapsed');
   }
+}
+
+function showEidModal(groupTitle, eidListStr) {
+  const modal = document.getElementById('eid-modal');
+  const title = document.getElementById('eid-modal-title');
+  const list = document.getElementById('eid-modal-list');
+  
+  title.textContent = `${groupTitle} - EID List`;
+  
+  const eids = eidListStr.split(', ').filter(e => e.trim());
+  list.innerHTML = eids.map(eid => `<li>${eid}</li>`).join('');
+  
+  modal.classList.add('show');
+}
+
+function closeEidModal() {
+  const modal = document.getElementById('eid-modal');
+  modal.classList.remove('show');
 }
 
 function getGroupForFeature(featureName) {
@@ -317,20 +461,28 @@ async function fetchStatus(){
     }
 
     const licenses = data.licenses || {};
+    const eidInfo = data.eid_info || {};
     
     // Group licenses
     const grouped = {};
     FEATURE_GROUPS.groups.forEach(g => {
-      grouped[g.id] = { group: g, features: [] };
+      grouped[g.id] = { group: g, features: [], eids: new Set() };
     });
-    grouped['other'] = { group: FEATURE_GROUPS.other || {title: 'Other', icon: 'static/icons/other.png'}, features: [] };
+    grouped['other'] = { group: FEATURE_GROUPS.other || {title: 'Other', icon: 'static/icons/other.png'}, features: [], eids: new Set() };
 
     Object.keys(licenses).sort().forEach(name => {
       const groupId = getGroupForFeature(name);
       if (grouped[groupId]) {
         grouped[groupId].features.push({name, data: licenses[name]});
+        // Add EIDs for this feature to the group's EID set
+        if (eidInfo[name]) {
+          eidInfo[name].forEach(eid => grouped[groupId].eids.add(eid));
+        }
       } else {
         grouped['other'].features.push({name, data: licenses[name]});
+        if (eidInfo[name]) {
+          eidInfo[name].forEach(eid => grouped['other'].eids.add(eid));
+        }
       }
     });
 
@@ -346,12 +498,16 @@ async function fetchStatus(){
         
         const grp = groupData.group;
         const isCollapsed = collapsedGroups.has(groupId);
+        const eidCount = groupData.eids.size;
+        const eidList = Array.from(groupData.eids).sort().join(', ');
+        const eidDisplay = groupId !== 'other' && eidCount > 0 ? `<span class="eid-count">${eidCount} EID <span class="eid-info-icon" onclick="event.stopPropagation(); showEidModal('${grp.title}', '${eidList}')" title="${t('view_eids')}">ⓘ</span></span>` : '';
         
         html += `<tr class="group-header" onclick="toggleGroup('${groupId}')">
                   <td colspan="3">
                     <div class="group-header-content">
                       <img src="${grp.icon || 'static/icons/other.png'}" class="group-icon" alt="${grp.title}" />
                       <span>${grp.title || groupId}</span>
+                      ${eidDisplay}
                       <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" id="group-toggle-${groupId}">▼</span>
                     </div>
                   </td>
@@ -431,8 +587,33 @@ async function doRestart(){
   }
 }
 
+async function doRefreshEid(){
+  if(refreshingEid) return;
+  refreshingEid = true;
+  btnRefreshEid.disabled = true;
+  btnRefreshEidLabel.textContent = t('loading');
+  try{
+    const r = await fetch(refreshEidUrl, {method: 'POST'});
+    const data = await r.json().catch(()=>null);
+    if(r.ok && data && data.ok){
+      showToast(t('eid_refresh_success'));
+      await fetchStatus(); // Refresh to show updated EID counts
+    } else {
+      const err = (data && data.error) ? data.error : ('HTTP ' + r.status);
+      showToast(t('eid_refresh_error', {err}));
+    }
+  } catch(e){
+    showToast(t('fetch_error'));
+  } finally{
+    refreshingEid = false;
+    btnRefreshEid.disabled = false;
+    btnRefreshEidLabel.textContent = t('refresh_eid_label');
+  }
+}
+
 btnRefresh.addEventListener("click", doRefresh);
 if(btnRestart) btnRestart.addEventListener("click", doRestart);
+if(btnRefreshEid) btnRefreshEid.addEventListener("click", doRefreshEid);
 
 // initial
 fetchStatus();

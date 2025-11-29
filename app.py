@@ -399,6 +399,37 @@ def get_db_path():
 DB_PATH = get_db_path()
 _stats_last_state = {}  # Track last stored state per feature to detect changes
 
+# EID information cache
+_eid_cache = {}
+_eid_cache_timestamp = 0
+EID_CACHE_DURATION = 24 * 3600  # 24 hours in seconds
+
+def refresh_eid_cache():
+    """Refresh the EID cache by running CLM query-features command."""
+    global _eid_cache, _eid_cache_timestamp
+    try:
+        clm_output = try_clm_query_features()
+        if clm_output:
+            _eid_cache = parse_eid_info(clm_output)
+            _eid_cache_timestamp = time.time()
+            logger.info(f"EID cache refreshed: {len(_eid_cache)} features")
+            return True
+    except Exception as e:
+        logger.error(f"Failed to refresh EID cache: {e}")
+    return False
+
+def get_eid_info():
+    """Get EID information from cache, refreshing if needed."""
+    global _eid_cache, _eid_cache_timestamp
+    
+    # Check if cache needs refresh (older than 24h or empty)
+    cache_age = time.time() - _eid_cache_timestamp
+    if not _eid_cache or cache_age > EID_CACHE_DURATION:
+        logger.debug(f"EID cache stale (age: {cache_age:.0f}s), refreshing...")
+        refresh_eid_cache()
+    
+    return _eid_cache
+
 def init_stats_db():
     """Initialize SQLite database for statistics tracking.
     Creates database next to executable if it doesn't exist.
@@ -578,6 +609,7 @@ def load_translations():
 load_translations()
 load_feature_groups()
 init_stats_db()
+refresh_eid_cache()  # Initial EID cache load on startup
 
 def get_locale():
     """Get current locale from query param, cookie, or Accept-Language header."""
@@ -1011,6 +1043,68 @@ def restart_service(service_name):
 
 
 # ---------- lmstat Execution ----------
+
+def try_clm_query_features():
+    """
+    Execute CLMCommandLine.exe query-features to get EID information.
+    
+    Returns: Raw output text or None if command fails
+    """
+    clm_path = os.path.join(os.path.dirname(LMUTIL_PATH), "CLMCommandLine.exe")
+    
+    if not os.path.exists(clm_path):
+        logger.debug(f"CLMCommandLine.exe not found at: {clm_path}")
+        return None
+    
+    try:
+        out = subprocess.check_output(
+            [clm_path, "query-features"],
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=30,
+            **_SUBP_NO_WINDOW_KW
+        )
+        logger.debug("CLM query-features command succeeded")
+        return out
+    except Exception as e:
+        logger.debug(f"CLM query-features failed: {e}")
+        return None
+
+
+def parse_eid_info(raw_text):
+    """
+    Parse CLM query-features output to extract EID to feature mapping.
+    
+    Returns: Dict mapping feature names to set of EIDs
+    """
+    if not raw_text:
+        return {}
+    
+    feature_to_eids = {}
+    current_eid = None
+    
+    # Pattern: - 00112-15895-00040-08571-EEC92 (Floating):
+    eid_pattern = re.compile(r'^\s*-\s*([0-9A-F]{5}-[0-9A-F]{5}-[0-9A-F]{5}-[0-9A-F]{5}-[0-9A-F]{5})\s+\(', re.IGNORECASE)
+    # Pattern: - M3D_CLWRX.ArcGIS 0/1
+    feature_pattern = re.compile(r'^\s*-\s+([A-Za-z0-9_\.]+)\s+\d+/\d+')
+    
+    for line in raw_text.splitlines():
+        eid_match = eid_pattern.search(line)
+        if eid_match:
+            current_eid = eid_match.group(1).upper()
+            continue
+        
+        if current_eid:
+            feature_match = feature_pattern.search(line)
+            if feature_match:
+                feature_name = feature_match.group(1)
+                if feature_name not in feature_to_eids:
+                    feature_to_eids[feature_name] = set()
+                feature_to_eids[feature_name].add(current_eid)
+    
+    logger.debug(f"Parsed EID info for {len(feature_to_eids)} features")
+    return feature_to_eids
+
 
 def try_lmstat_commands():
     """
@@ -1603,8 +1697,16 @@ def status():
                 continue
 
             filtered[name] = item
+        
+        # Get EID information from cache
+        eid_data = get_eid_info()
 
-        return jsonify({"ok": True, "last_update": _last_update, "licenses": filtered})
+        return jsonify({
+            "ok": True,
+            "last_update": _last_update,
+            "licenses": filtered,
+            "eid_info": {fname: list(eids) for fname, eids in eid_data.items()}
+        })
 
 
 @app.route("/refresh", methods=["POST"])
@@ -1784,6 +1886,21 @@ def api_stats():
     except Exception as e:
         logger.error(f"Stats API error: {e}", exc_info=True)
         return jsonify({'ok': False, 'error': str(e)})
+
+
+@app.route("/refresh-eid", methods=["POST"])
+def refresh_eid_route():
+    """Manually refresh EID cache."""
+    logger.info("Manual EID refresh requested")
+    try:
+        success = refresh_eid_cache()
+        if success:
+            return jsonify({"ok": True, "message": "EID cache refreshed successfully"})
+        else:
+            return jsonify({"ok": False, "error": "Failed to refresh EID cache"}), 500
+    except Exception as e:
+        logger.error(f"EID refresh error: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 @app.route("/restart", methods=["POST"])

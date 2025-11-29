@@ -56,5 +56,9 @@
   "previous_day": "Día anterior",
   "next_day": "Día siguiente",
   "time": "Tiempo",
-  "license_count": "Cantidad de licencias"
+  "license_count": "Cantidad de licencias",
+  "view_eids": "Ver lista de EID",
+  "refresh_eid_label": "Actualizar informaci\u00f3n de licencias",
+  "eid_refresh_success": "Informaci\u00f3n de licencias actualizada correctamente",
+  "eid_refresh_error": "Error al actualizar la informaci\u00f3n de licencias: {err}"
 }

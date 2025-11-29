@@ -56,5 +56,9 @@
   "previous_day": "Previous Day",
   "next_day": "Next Day",
   "time": "Time",
-  "license_count": "License Count"
+  "license_count": "License Count",
+  "view_eids": "View EID list",
+  "refresh_eid_label": "Refresh license information",
+  "eid_refresh_success": "License information refreshed successfully",
+  "eid_refresh_error": "Failed to refresh license information: {err}"
 }
