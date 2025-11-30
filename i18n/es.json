@@ -60,5 +60,11 @@
   "view_eids": "Ver lista de EID",
   "refresh_eid_label": "Actualizar informaci\u00f3n de licencias",
   "eid_refresh_success": "Informaci\u00f3n de licencias actualizada correctamente",
-  "eid_refresh_error": "Error al actualizar la informaci\u00f3n de licencias: {err}"
+  "eid_refresh_error": "Error al actualizar la informaci\u00f3n de licencias: {err}",
+  "eid_overview_title": "Resumen de EID",
+  "no_eid_data": "No hay datos de EID disponibles.",
+  "other_features": "Otras funciones",
+  "total_label": "total",
+  "app_admin_mode": "Modo admin app",
+  "update_available_label": "Actualizaci\u00f3n disponible: v{version}"
 }

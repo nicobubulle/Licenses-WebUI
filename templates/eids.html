@@ -1,0 +1,254 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>EIDs - Licenses WebUI</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{
+      --primary:#007bff; --danger:#dc3545; --muted:#666; --card:#f9f9f9; --surface:#ffffff; --border:#e6e6e6; --radius:8px;
+    }
+    body { font-family: Arial, Helvetica, sans-serif; margin:20px; background:#fafafa; color:#111; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    h1 { font-size:1.25rem; margin:0; }
+    .toolbar { display:flex; gap:8px; align-items:center; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-weight:600; text-decoration:none; color:#111; }
+    .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
+    .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
+    .card { background:var(--card); padding:16px; border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; }
+    .eid-row { background:var(--surface); padding:12px 14px; border:1px solid var(--border); border-radius:6px; margin-bottom:10px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
+    .eid-label { font-weight:700; font-family:monospace; margin-right:8px; }
+    .eid-icons { display:flex; gap:12px; flex-wrap:wrap; }
+    .icon-wrap { position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center; }
+    .icon-wrap img { max-width:36px; max-height:36px; object-fit:contain; }
+    .badge { position:absolute; top:0; right:0; background:#dc3545; color:#fff; font-size:11px; padding:2px 5px; border-radius:12px; line-height:1; box-shadow:0 1px 3px rgba(0,0,0,0.25); font-weight:600; }
+    .tooltip { position:absolute; z-index:2000; background:#222; color:#fff; padding:6px 8px; border-radius:6px; font-size:12px; max-width:280px; box-shadow:0 4px 14px rgba(0,0,0,0.25); pointer-events:none; white-space:normal; word-break:break-word; }
+    footer { margin-top:32px; padding-top:16px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:0.85em; }
+    footer a { color: var(--primary); text-decoration:none; }
+    .empty { padding:24px; text-align:center; color:var(--muted); font-size:0.95em; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title-row" style="display:flex; align-items:center; gap:10px;">
+      <img src="{{ url_for('static', filename='key.svg') }}" alt="" width="28" height="28" style="filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25));" aria-hidden="true" />
+      <h1 style="display:inline-block; margin:0;" id="page-title">{{ _('eid_overview_title') }}</h1>
+      <small style="display:inline-block; margin-left:4px; color:#666; font-size:0.9em;">v{{ app_version }}</small>
+    </div>
+    <div class="toolbar">
+      <a href="{{ url_for('index') }}" class="btn btn-ghost" id="back-link">← {{ _('back_to_dashboard') }}</a>
+    </div>
+  </header>
+
+  <div class="card" id="eid-container">
+    <div id="eid-list"></div>
+  </div>
+
+  <footer>
+    <p style="margin:8px 0;">
+      <button id="btn-refresh-eid" class="btn btn-ghost" style="font-size:0.9em;">
+        <span id="btn-refresh-eid-label">{{ _('refresh_eid_label') }}</span>
+      </button>
+    </p>
+    <p style="margin:8px 0;">
+      <strong>Licenses WebUI</strong> v{{ app_version }}
+      {% if update_available %}
+        — <a href="{{ latest_url }}" target="_blank" style="color: var(--primary); text-decoration:none; font-weight:600;">{{ _('update_available_label', version=latest_version) }}</a>
+      {% endif %}
+    </p>
+    <p style="margin:8px 0;">&copy; 2025 <a href="https://github.com/nicobubulle/Licenses-WebUI" target="_blank" rel="noopener noreferrer">nicobubulle/Licenses-WebUI</a></p>
+    <p style="margin:8px 0;">{{ _('app_admin_mode') }}</p>
+  </footer>
+
+<script>
+const EIDS = {{ eids_json|safe }};
+const FEATURE_GROUPS = {{ feature_groups_json|safe }};
+const I18N = {{ i18n_json|safe }};
+const refreshEidUrl = '/refresh-eid';
+const btnRefreshEid = document.getElementById('btn-refresh-eid');
+const btnRefreshEidLabel = document.getElementById('btn-refresh-eid-label');
+let refreshing = false;
+
+// Translation helper
+function t(key, params = {}) {
+  let v = I18N[key] || key;
+  Object.keys(params).forEach(k => {
+    v = v.replace(new RegExp(`\\{${k}\\}`, 'g'), params[k]);
+  });
+  return v;
+}
+
+// Build map of group info for icon fallback
+const groupInfoById = {};
+if (FEATURE_GROUPS.groups) {
+  FEATURE_GROUPS.groups.forEach(g => { groupInfoById[g.id] = g; });
+}
+const otherGroup = FEATURE_GROUPS.other || { icon: 'static/icons/other.png', title: 'Other' };
+
+function createTooltip(content) {
+  const tip = document.createElement('div');
+  tip.className = 'tooltip';
+  tip.innerHTML = content;
+  document.body.appendChild(tip);
+  return tip;
+}
+
+function positionTooltip(tip, clientX, clientY) {
+  const margin = 8;
+  const tipW = tip.offsetWidth;
+  const tipH = tip.offsetHeight;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  let top = clientY - tipH - margin; // prefer above cursor
+  if (top < margin) {
+    top = clientY + margin; // flip below if not enough space
+  }
+  let left = clientX - (tipW / 2);
+  if (left < margin) left = margin;
+  if (left + tipW > vw - margin) left = vw - tipW - margin;
+
+  tip.style.top = (top + window.scrollY) + 'px';
+  tip.style.left = (left + window.scrollX) + 'px';
+}
+
+function renderEids() {
+  const container = document.getElementById('eid-list');
+  const eids = Object.keys(EIDS).sort();
+  if (eids.length === 0) {
+    container.innerHTML = `<div class="empty">${t('no_eid_data')}</div>`;
+    return;
+  }
+  let html = '';
+  eids.forEach(eid => {
+    const features = EIDS[eid];
+    // Separate other-group features
+    const otherFeatures = [];
+    const nonOtherFeatures = [];
+    features.forEach(f => {
+      if (f.group === 'other') otherFeatures.push(f); else nonOtherFeatures.push(f);
+    });
+    html += `<div class="eid-row"><div class="eid-label">${eid}</div><div class="eid-icons">`;
+    // Render non-other features individually (can duplicate group icons)
+    nonOtherFeatures.forEach(f => {
+      const g = f.group && groupInfoById[f.group] ? groupInfoById[f.group] : otherGroup;
+      const icon = g.icon || otherGroup.icon;
+      const showBadge = f.group && f.group !== 'other' && f.total !== null && f.total !== undefined;
+      const badgeHtml = showBadge ? `<span class='badge'>${f.total}</span>` : '';
+      const totalText = f.total !== null ? ` (${t('total_label')}: ${f.total})` : '';
+      const tipContent = `${f.feature}${totalText}`;
+      html += `<div class='icon-wrap' data-tip="${tipContent.replace(/"/g,'&quot;')}"><img src='${icon}' alt='${f.feature}' />${badgeHtml}</div>`;
+    });
+    // Render single aggregated 'other' icon if there are other features
+    if (otherFeatures.length > 0) {
+      const icon = otherGroup.icon || 'static/icons/other.png';
+      const listHtml = otherFeatures
+        .map(of => {
+          const totalText = of.total !== null ? ` (${t('total_label')}: ${of.total})` : '';
+          return `${of.feature}${totalText}`;
+        })
+        .join('<br>');
+      // No badge for other icon per spec
+      html += `<div class='icon-wrap' data-tip="${listHtml.replace(/"/g,'&quot;')}"><img src='${icon}' alt='${t('other_features')}' /></div>`;
+    }
+    html += '</div></div>';
+  });
+  container.innerHTML = html;
+
+  // Tooltip handling
+  let activeTip = null;
+  container.querySelectorAll('.icon-wrap').forEach(wrap => {
+    const onMove = (ev) => {
+      if (activeTip) positionTooltip(activeTip, ev.clientX, ev.clientY);
+    };
+    wrap.addEventListener('mouseenter', (ev) => {
+      const content = wrap.getAttribute('data-tip');
+      activeTip = createTooltip(content);
+      positionTooltip(activeTip, ev.clientX, ev.clientY);
+      wrap.addEventListener('mousemove', onMove);
+    });
+    wrap.addEventListener('mouseleave', () => {
+      wrap.removeEventListener('mousemove', onMove);
+      if (activeTip) { activeTip.remove(); activeTip = null; }
+    });
+  });
+}
+
+async function doRefreshEid(){
+  if(refreshing) return;
+  refreshing = true;
+  btnRefreshEid.disabled = true;
+  btnRefreshEidLabel.textContent = t('loading');
+  try {
+    const r = await fetch(refreshEidUrl, {method: 'POST'});
+    const data = await r.json().catch(()=>null);
+    if(r.ok && data && data.ok){
+      // Refetch status to rebuild mapping via a simple call
+      const statusR = await fetch('/status');
+      const statusData = await statusR.json().catch(()=>null);
+      if(statusData && statusData.eid_info){
+        // Rebuild EIDS from status response (feature->EIDs) inversion
+        const inverted = {};
+        Object.entries(statusData.eid_info).forEach(([feature, eidSet]) => {
+          eidSet.forEach(eid => { (inverted[eid] = inverted[eid] || []).push(feature); });
+        });
+        // Merge license info
+        const licenses = statusData.licenses || {};
+        const rebuilt = {};
+        Object.keys(inverted).forEach(eid => {
+          rebuilt[eid] = inverted[eid].map(feat => {
+            const lic = licenses[feat] || {};
+            // group is resolved client-side again
+            return { feature: feat, total: lic.total ?? null, used: lic.used ?? null, group: resolveGroup(feat) };
+          });
+        });
+        // Replace global EIDS and re-render
+        for(const k in EIDS) delete EIDS[k];
+        Object.assign(EIDS, rebuilt);
+        renderEids();
+      }
+    }
+  } catch(e){
+    console.error('Failed to refresh EID info', e);
+  } finally {
+    refreshing = false;
+    btnRefreshEid.disabled = false;
+    btnRefreshEidLabel.textContent = t('refresh_eid_label');
+  }
+}
+
+// Client-side group resolution (same logic as dashboard)
+const exactFeatureToGroup = {};
+const wildcardPatterns = [];
+if (FEATURE_GROUPS.groups) {
+  FEATURE_GROUPS.groups.forEach(g => {
+    if(g.features){
+      g.features.forEach(f => {
+        const fl = String(f).toLowerCase();
+        if(fl.includes('*')){
+          wildcardPatterns.push({pattern: fl, groupId: g.id});
+        } else {
+          exactFeatureToGroup[fl] = g.id;
+        }
+      });
+    }
+  });
+}
+function resolveGroup(featureName){
+  const lname = String(featureName).toLowerCase();
+  if(exactFeatureToGroup[lname]) return exactFeatureToGroup[lname];
+  for(const {pattern, groupId} of wildcardPatterns){
+    // Escape regex special chars except * which we convert to .*
+    const safe = pattern.replace(/[.+?^${}()|[\]\\]/g,'\\$&').replace(/\*/g,'.*');
+    const regex = new RegExp('^' + safe + '$');
+    if(regex.test(lname)) return groupId;
+  }
+  return 'other';
+}
+
+renderEids();
+btnRefreshEid.addEventListener('click', doRefreshEid);
+</script>
+</body>
+</html>

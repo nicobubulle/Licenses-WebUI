@@ -141,6 +141,19 @@ def ensure_config_defaults(cfg_obj: configparser.ConfigParser, defaults: dict, p
         logger.debug("ensure_config_defaults: no missing keys detected; no rewrite needed")
         return
 
+    # Only write if the file content would actually change
+    import io
+    new_buf = io.StringIO()
+    cfg_obj.write(new_buf)
+    new_content = new_buf.getvalue()
+    old_content = None
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            old_content = f.read()
+    if old_content is not None and old_content.strip() == new_content.strip():
+        logger.debug("ensure_config_defaults: config file content unchanged; no rewrite needed")
+        return
+
     # Prepare atomic write
     tmp_path = path + ".tmp"
     bak_path = path + ".bak"
@@ -158,7 +171,7 @@ def ensure_config_defaults(cfg_obj: configparser.ConfigParser, defaults: dict, p
                 logger.warning(f"Could not create backup config: {e}")
 
         with open(tmp_path, "w", encoding="utf-8") as f:
-            cfg_obj.write(f)
+            f.write(new_content)
         os.replace(tmp_path, path)
         logger.info(
             "Updated config.ini with missing defaults (%d additions): %s",
@@ -1989,6 +2002,87 @@ def stats():
         latest_version=LATEST_VERSION,
         latest_url=LATEST_URL,
         admin_mode=admin_mode
+    )
+
+@app.route("/eids")
+def eids_page():
+    """Application admin EID overview page."""
+    # Determine app-level admin mode (cookie or query)
+    admin_mode = False
+    try:
+        param_admin = request.args.get("admin")
+        cookie_admin = request.cookies.get("admin")
+        if (param_admin and ADMIN_KEY and param_admin == ADMIN_KEY) or (cookie_admin and ADMIN_KEY and cookie_admin == ADMIN_KEY):
+            admin_mode = True
+    except Exception:
+        admin_mode = False
+
+    if not admin_mode:
+        # Non-admins are redirected to dashboard
+        return redirect(url_for("index"))
+
+    # Build EID -> features detailed mapping using cached EID info and current license data
+    with _lock:
+        eid_feature_map_raw = _eid_cache.copy()
+        licenses_snapshot = _parsed.copy()
+
+    # Pre-compute group resolution helpers
+    exact_map = {}
+    wildcard_patterns = []
+    try:
+        for g in FEATURE_GROUPS.get("groups", []):
+            for f in g.get("features", []):
+                fl = str(f).lower()
+                if "*" in fl:
+                    wildcard_patterns.append((fl, g.get("id")))
+                else:
+                    exact_map[fl] = g.get("id")
+    except Exception:
+        pass
+
+    def resolve_group(feature_name: str) -> str:
+        lname = str(feature_name).lower()
+        if lname in exact_map:
+            return exact_map[lname] or "other"
+        for pat, gid in wildcard_patterns:
+            # Convert wildcard * to regex any chars
+            import re as _re
+            pattern_re = '^' + _re.escape(pat).replace('\\*', '.*') + '$'
+            if _re.match(pattern_re, lname):
+                return gid or "other"
+        return "other"
+
+    eid_detailed = {}
+    for feature, eids in eid_feature_map_raw.items():
+        for eid in eids:
+            eid_list = eid_detailed.setdefault(eid, [])
+            lic = licenses_snapshot.get(feature, {})
+            total = lic.get('total')
+            used = lic.get('used')
+            group_id = resolve_group(feature)
+            eid_list.append({
+                'feature': feature,
+                'total': total if total is not None else None,
+                'used': used if used is not None else None,
+                'group': group_id,
+            })
+
+    # Sort features inside each EID for stable display
+    for eid, flist in eid_detailed.items():
+        flist.sort(key=lambda x: (x.get('group') != 'other', x.get('feature').lower()))
+
+    eid_json = json.dumps(eid_detailed)
+
+    return render_template(
+        "eids.html",
+        admin_mode=admin_mode,
+        show_restart=False,
+        refresh_minutes=REFRESH_MIN,
+        app_version=VERSION,
+        update_available=UPDATE_AVAILABLE,
+        latest_version=LATEST_VERSION,
+        latest_url=LATEST_URL,
+        eids_json=eid_json
     )
 
 

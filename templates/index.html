@@ -43,6 +43,10 @@
     .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-danger { background: linear-gradient(180deg,var(--danger),#b02a37); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
+    .btn-stats { background: linear-gradient(180deg,#6f42c1,#5a32a3); color:#fff; border:1px solid rgba(0,0,0,0.08); }
+    .btn-stats img { filter: brightness(0) invert(1); }
+    .btn-eid { background: linear-gradient(180deg,#20c997,#148f6f); color:#fff; border:1px solid rgba(0,0,0,0.08); }
+    .btn-eid img { filter: brightness(0) invert(1); }
 
     /* Spinner */
     .spinner {
@@ -267,7 +271,13 @@
       </button>
       {% endif %}
 
-      <a href="{{ url_for('stats') }}" class="btn btn-ghost" title="{{ _('view_statistics') }}" aria-label="{{ _('view_statistics') }}">
+      {% if admin_mode %}
+      <a href="{{ url_for('eids_page') }}" class="btn btn-eid" title="EID Overview" aria-label="EID Overview">
+        <img src="{{ url_for('static', filename='key.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+        <span>EIDs</span>
+      </a>
+      {% endif %}
+      <a href="{{ url_for('stats') }}" class="btn btn-stats" title="{{ _('view_statistics') }}" aria-label="{{ _('view_statistics') }}">
         <img src="{{ url_for('static', filename='graph.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
         <span>{{ _('statistics') }}</span>
       </a>

@@ -60,5 +60,11 @@
   "view_eids": "View EID list",
   "refresh_eid_label": "Refresh license information",
   "eid_refresh_success": "License information refreshed successfully",
-  "eid_refresh_error": "Failed to refresh license information: {err}"
+  "eid_refresh_error": "Failed to refresh license information: {err}",
+  "eid_overview_title": "EID Overview",
+  "no_eid_data": "No EID data available.",
+  "other_features": "Other features",
+  "total_label": "total",
+  "app_admin_mode": "App admin mode",
+  "update_available_label": "Update available: v{version}"
 }

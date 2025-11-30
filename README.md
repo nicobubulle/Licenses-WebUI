@@ -12,10 +12,13 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - Periodic background refresh of lmstat output
 - Manual refresh (runs same parsing + notification checkers as background loop)
 - **Statistics Dashboard**: Track and visualize license usage over time with interactive graphs (SQLite storage)
+- **EID Information**: View detailed EID (Enterprise ID) mappings with feature grouping and license totals (admin-only)
+- **Application Admin Mode**: Secure admin access via randomly generated MD5 key for sensitive features
 - Raw output debug view (`/raw`)
-- Windows service restart with robust state checking (requires admin + enabled in config)
+- Windows service restart with robust state checking (requires OS admin + enabled in config)
 - System tray integration (pystray + Pillow)
 - **Feature Grouping**: Organize licenses into collapsible categories with custom icons via `feature_groups.json` (supports exact names and wildcard patterns)
+- **Auto-Configuration**: Missing config keys are automatically added with default values on startup
 - Internationalization (i18n JSON files: en, fr, de, es) with query/cookie/header locale negotiation
 - Automatic GitHub release check (daily) + optional Teams update notification
 - Microsoft Teams notifications (Adaptive Card) for:
@@ -26,7 +29,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
   - Daemon status (license server down/up detection with service and port verification)
 - Maintenance filtering: optionally hide and suppress notifications for features containing `maint`
 - Additional hide filtering via substring list
-- Configurable via `config.ini`
+- Configurable via `config.ini` with atomic file updates and backup creation
 
 ## Quickstart (Windows)
 1. Download / build the executable and run it (first start will create `config.ini` if missing).
@@ -53,9 +56,11 @@ schtasks /create /tn "Licenses WebUI" /tr "C:\path\to\Licenses_WebUI.exe" /sc on
 - `web_port`: Web UI port (default `8080`).
 - `refresh_minutes`: Background refresh interval in minutes.
 - `default_locale`: Fallback UI locale (`en`, `fr`, `de`, `es`).
+- `admin_key`: Auto-generated random MD5 hash for app-level admin authentication (do not share).
+- `show_eid_info`: `yes|no` show EID info button to non-admin users (default `no`).
 - `hide_maintenance`: `yes|no` hide features containing `maint` and suppress related notifications.
 - `hide_list`: Comma-separated substrings; any feature containing one is hidden.
-- `enable_restart`: Enable Windows service restart button (requires admin elevation on startup).
+- `enable_restart`: Enable Windows service restart button (requires OS admin elevation on startup).
 
 ### SERVICE section
 - `service_name`: Display + target for restart functionality.
@@ -77,11 +82,13 @@ Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, e
 
 ## Endpoints
 - `/` — main UI
-- `/status` — JSON status (licenses + last_update)
+- `/status` — JSON status (licenses + last_update + eid_info)
 - `/refresh` — POST to force synchronous refresh
-- `/restart` — POST to request service restart (admin + enable_restart required)
+- `/refresh-eid` — POST to manually refresh EID cache (24-hour TTL, admin-only)
+- `/restart` — POST to request service restart (OS admin + enable_restart required)
 - `/raw` — raw lmstat output for debugging
 - `/stats` — statistics dashboard with interactive graphs
+- `/eids` — EID overview page with feature mappings (app admin-only)
 - `/api/stats` — JSON API for time-series data (query params: `feature`, `hours`)
 
 ## Statistics Dashboard
@@ -97,6 +104,30 @@ The application automatically tracks license usage changes in a SQLite database 
 
 Access the dashboard via the "📊 Statistics" button in the main UI toolbar.
 
+## EID Information
+The application tracks Enterprise ID (EID) information from lmstat output and provides a dedicated admin-only overview page.
+
+**Features:**
+- Maps each EID to its associated features with group icons
+- Displays license totals as badges on feature icons
+- Aggregates "other" group features into a single icon
+- Smart tooltips with viewport awareness
+- 24-hour cache with manual refresh capability
+- Column layout: EID number above feature icons
+
+**Access:**
+1. Authenticate with admin key: append `?admin=<your_admin_key>` to URL (persists for 7 days via cookie)
+2. Click the "🔑 EID Info" button in the toolbar
+3. Or navigate directly to `/eids`
+
+The admin key is auto-generated on first run and stored in `config.ini` under `[SETTINGS]` as `admin_key`. Keep this key secure.
+
+**Admin vs Non-Admin:**
+- **OS Admin Mode**: Windows administrator privileges (required for service restart)
+- **App Admin Mode**: Application-level authentication via `admin_key` (required for EID page and sensitive features)
+
+Configure `show_eid_info = yes` in `config.ini` to make the EID button visible to non-admin users.
+
 ## Feature Grouping
 Licenses are automatically organized into collapsible categories with custom icons for easier navigation. Groups are collapsed by default and can be toggled by clicking the header.
 
@@ -109,7 +140,7 @@ Translation files live in `i18n/` as JSON. Supported locales are loaded from `ap
 Locale negotiation: `?lang=xx` query param → `lang` cookie → `Accept-Language` → default.
 
 ## Configuration details
-`config.ini` is created automatically with example values. Edit and restart the application. Unknown keys are ignored. Percent symbols (%) in webhook URLs are preserved using raw read mode.
+`config.ini` is created automatically with example values on first run. Missing configuration keys are automatically added with default values when the application starts, and a backup (`.bak`) is created before any updates. Edit and restart the application. Unknown keys are ignored. Percent symbols (%) in webhook URLs are preserved using raw read mode.
 
 Example TEAMS block:
 ```
@@ -132,7 +163,10 @@ notify_daemon = yes
 - Ensure `lmutil.exe` path is correct and that the license manager is reachable.
 
 ## Development & Packaging notes
-- The app requests elevation at startup if `enable_restart = yes`; accept UAC for restart capability.
+- The app requests elevation at startup if `enable_restart = yes`; accept UAC for restart capability (OS admin mode).
+- App admin mode uses `?admin=<key>` URL parameter; session persists via 7-day cookie.
+- EID information is cached for 24 hours; refresh via `/refresh-eid` endpoint or EID page button.
+- Config file updates are atomic with temporary files and automatic backups (`.bak`).
 - Threads: refresh loop, update check loop (daily), systray, optional browser opener.
 - Avoid calling request-dependent functions in background threads (already handled).
 
