@@ -153,7 +153,6 @@
       color: white;
       font-size: 13px;
       font-weight: 600;
-      font-style: italic;
       cursor: pointer;
       transition: all 0.2s ease;
       box-shadow: 0 2px 4px rgba(0, 120, 212, 0.3);
@@ -329,8 +328,8 @@
     <p style="margin: 8px 0;">
       {{ _('footer_license') }} — 
       <a href="https://github.com/nicobubulle/Licenses-WebUI/blob/main/README.md" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none;">{{ _('footer_docs') }}</a>
-      {% if show_restart %}
-        — {{ _('footer_admin_mode') }}
+      {% if admin_mode %}
+        — App admin mode
       {% endif %}
     </p>
     <p style="margin: 12px 0 8px 0;">
@@ -500,7 +499,9 @@ async function fetchStatus(){
         const isCollapsed = collapsedGroups.has(groupId);
         const eidCount = groupData.eids.size;
         const eidList = Array.from(groupData.eids).sort().join(', ');
-        const eidDisplay = groupId !== 'other' && eidCount > 0 ? `<span class="eid-count">${eidCount} EID <span class="eid-info-icon" onclick="event.stopPropagation(); showEidModal('${grp.title}', '${eidList}')" title="${t('view_eids')}">ⓘ</span></span>` : '';
+        const canShowEidButton = {{ (admin_mode or show_eid_info)|tojson }};
+        const eidInfoBtnHtml = canShowEidButton ? `<span class="eid-info-icon" onclick="event.stopPropagation(); showEidModal('${grp.title}', '${eidList}')" title="${t('view_eids')}">ⓘ</span>` : '';
+        const eidDisplay = groupId !== 'other' && eidCount > 0 ? `<span class="eid-count">${eidCount} EID ${eidInfoBtnHtml}</span>` : '';
         
         html += `<tr class="group-header" onclick="toggleGroup('${groupId}')">
                   <td colspan="3">

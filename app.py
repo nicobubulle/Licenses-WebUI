@@ -8,6 +8,8 @@ import configparser
 import logging
 import json
 import sqlite3
+import hashlib
+import uuid
 from flask import Flask, render_template, jsonify, redirect, url_for, request, make_response
 import ctypes
 import sys
@@ -75,15 +77,165 @@ STATE_STOP_PENDING = 3
 STATE_RUNNING = 4
 
 # ---------- Config ----------
-cfg = configparser.ConfigParser()
-config_path = "config.ini"
+cfg = configparser.ConfigParser(interpolation=None)
+# Determine absolute config path next to script or executable (frozen)
+if getattr(sys, 'frozen', False):
+    _BASE_DIR = os.path.dirname(sys.executable)
+else:
+    _BASE_DIR = os.path.dirname(__file__)
+config_path = os.path.join(_BASE_DIR, "config.ini")
+logger.debug(f"Resolved config.ini path: {config_path}")
+
+# Known default configuration to ensure missing keys are auto-filled
+DEFAULT_CONFIG = {
+    "SETTINGS": {
+        "lmutil_path": DEFAULT_LMUTIL,
+        "port": DEFAULT_PORT,
+        "web_port": str(DEFAULT_WEB_PORT),
+        "refresh_minutes": str(DEFAULT_REFRESH),
+        "default_locale": "en",
+        "hide_maintenance": "yes",
+        "hide_list": "",
+        "enable_restart": "no",
+        "show_eid_info": "no",
+    },
+    "SERVICE": {
+        "service_name": "FLEXnet License Server",
+    },
+    "TEAMS": {
+        "enabled": "no",
+        "webhook": "",
+        "notify_update": "no",
+        "notify_duplicate_checker": "no",
+        "notify_extratime": "no",
+        "extratime_duration": "72",
+        "extratime_exclusion": "",
+        "notify_soldout": "no",
+        "soldout_exclusion": "",
+        "notify_daemon": "no",
+    },
+}
+
+def ensure_config_defaults(cfg_obj: configparser.ConfigParser, defaults: dict, path: str) -> None:
+    """Ensure all known keys exist; write back to disk if anything was missing.
+
+    - Preserves existing values
+    - Adds any missing sections/keys with default values
+    - Writes atomically and creates a .bak backup of the previous file
+    """
+    added = []
+    changed = False
+    # Ensure sections and keys
+    for section, keys in defaults.items():
+        if not cfg_obj.has_section(section):
+            cfg_obj.add_section(section)
+            changed = True
+            added.append(f"[{section}]")
+        for key, val in keys.items():
+            if not cfg_obj.has_option(section, key) or cfg_obj.get(section, key) == "":
+                cfg_obj.set(section, key, str(val))
+                changed = True
+                added.append(f"{section}.{key}")
+
+    if not changed:
+        logger.debug("ensure_config_defaults: no missing keys detected; no rewrite needed")
+        return
+
+    # Prepare atomic write
+    tmp_path = path + ".tmp"
+    bak_path = path + ".bak"
+    try:
+        # Backup existing file if present
+        if os.path.exists(path):
+            try:
+                # Use replace to ensure bak is the latest previous copy
+                if os.path.exists(bak_path):
+                    os.remove(bak_path)
+                import shutil
+                shutil.copy2(path, bak_path)
+                logger.info(f"Backed up existing config to: {os.path.abspath(bak_path)}")
+            except Exception as e:
+                logger.warning(f"Could not create backup config: {e}")
+
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            cfg_obj.write(f)
+        os.replace(tmp_path, path)
+        logger.info(
+            "Updated config.ini with missing defaults (%d additions): %s",
+            len(added), ", ".join(added) if added else "<none>"
+        )
+    except Exception as e:
+        # Clean up tmp if write failed
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        logger.warning(f"Failed to update config.ini with defaults: {e}")
+
+def _generate_admin_key() -> str:
+    """Generate a random admin key (MD5 hex)."""
+    seed = f"{uuid.uuid4()}-{time.time()}-{os.getpid()}-{os.urandom(16).hex()}".encode("utf-8")
+    return hashlib.md5(seed).hexdigest()
+
+def ensure_admin_key(cfg_obj: configparser.ConfigParser, path: str) -> str:
+    """Ensure SETTINGS.admin_key exists; create and persist if missing. Returns the key."""
+    if not cfg_obj.has_section("SETTINGS"):
+        cfg_obj.add_section("SETTINGS")
+    key = cfg_obj.get("SETTINGS", "admin_key", fallback="").strip()
+    if key:
+        return key
+
+    key = _generate_admin_key()
+    cfg_obj.set("SETTINGS", "admin_key", key)
+
+    # Write atomically with backup
+    tmp_path = path + ".tmp"
+    bak_path = path + ".bak"
+    try:
+        if os.path.exists(path):
+            try:
+                if os.path.exists(bak_path):
+                    os.remove(bak_path)
+                import shutil
+                shutil.copy2(path, bak_path)
+                logger.info(f"Backed up existing config to: {os.path.abspath(bak_path)}")
+            except Exception as e:
+                logger.warning(f"Could not create backup config: {e}")
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            cfg_obj.write(f)
+        os.replace(tmp_path, path)
+        logger.info("Generated and saved new admin_key to config.ini")
+    except Exception as e:
+        try:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+        except Exception:
+            pass
+        logger.warning(f"Failed to persist admin_key to config.ini: {e}")
+    return key
 
 if os.path.exists(config_path):
     try:
         cfg.read(config_path)
         logger.info(f"Loaded config from: {os.path.abspath(config_path)}")
+        # Ensure any missing keys are added, then rewrite file
+        ensure_config_defaults(cfg, DEFAULT_CONFIG, config_path)
+        # Ensure admin key exists and is persisted
+        ADMIN_KEY = ensure_admin_key(cfg, config_path)
     except Exception as e:
         logger.warning(f"Error reading config.ini: {e}. Using defaults.")
+        # Attempt to recover by loading defaults then forcing rewrite
+        for section, keys in DEFAULT_CONFIG.items():
+            if not cfg.has_section(section):
+                cfg.add_section(section)
+            for k, v in keys.items():
+                if not cfg.has_option(section, k):
+                    cfg.set(section, k, v)
+        try:
+            ADMIN_KEY = ensure_admin_key(cfg, config_path)
+        except Exception:
+            ADMIN_KEY = _generate_admin_key()
 else:
     # Create a sample config.ini with sensible defaults so users can edit it next to the exe.
     sample = """; Licenses WebUI configuration
@@ -153,8 +305,23 @@ notify_daemon = no
         # Re-read the newly created config so values are available
         cfg.read(config_path)
         logger.info(f"No config.ini found: created sample at {os.path.abspath(config_path)}")
+        # After creating sample, still ensure keys align with known defaults
+        ensure_config_defaults(cfg, DEFAULT_CONFIG, config_path)
+        ADMIN_KEY = ensure_admin_key(cfg, config_path)
     except Exception as e:
         logger.warning(f"Failed to create sample config.ini: {e}. Continuing with defaults.")
+        ADMIN_KEY = _generate_admin_key()
+        logger.warning("Using ephemeral admin_key (not persisted) due to creation error.")
+
+if 'ADMIN_KEY' not in globals():
+    # Fallback in case previous block failed silently
+    try:
+        ADMIN_KEY = cfg.get("SETTINGS", "admin_key", fallback="")
+        if not ADMIN_KEY:
+            ADMIN_KEY = _generate_admin_key()
+    except Exception:
+        ADMIN_KEY = _generate_admin_key()
+        logger.debug("Fallback admin_key generated (post-load recovery)")
 
 # Safely read config with fallbacks
 try:
@@ -200,6 +367,12 @@ try:
     logger.info(f"Service restart enabled: {ENABLE_RESTART}")
 except Exception:
     ENABLE_RESTART = True
+
+# Show EID info config (default False)
+try:
+    SHOW_EID_INFO = cfg.getboolean("SETTINGS", "show_eid_info", fallback=False)
+except Exception:
+    SHOW_EID_INFO = False
 
 # Safely read SERVICE section
 try:
@@ -609,7 +782,7 @@ def load_translations():
 load_translations()
 load_feature_groups()
 init_stats_db()
-refresh_eid_cache()  # Initial EID cache load on startup
+# Defer initial EID cache refresh until after helper functions are defined later
 
 def get_locale():
     """Get current locale from query param, cookie, or Accept-Language header."""
@@ -1104,6 +1277,13 @@ def parse_eid_info(raw_text):
     
     logger.debug(f"Parsed EID info for {len(feature_to_eids)} features")
     return feature_to_eids
+
+
+# Perform initial EID cache refresh now that required functions exist
+try:
+    refresh_eid_cache()
+except Exception as _e:
+    logger.debug(f"Initial EID cache refresh failed (non-fatal): {_e}")
 
 
 def try_lmstat_commands():
@@ -1666,17 +1846,31 @@ def index():
         has_admin = False
     show_restart = bool(ENABLE_RESTART and has_admin)
 
+    # Application-level admin mode via URL param or cookie
+    param_admin = request.args.get("admin")
+    cookie_admin = request.cookies.get("admin")
+    is_admin_mode = False
+    if param_admin and ADMIN_KEY and param_admin == ADMIN_KEY:
+        is_admin_mode = True
+    elif cookie_admin and ADMIN_KEY and cookie_admin == ADMIN_KEY:
+        is_admin_mode = True
+
     resp = make_response(render_template(
         "index.html",
         refresh_minutes=REFRESH_MIN,
         service_msg=service_msg,
-        show_restart=show_restart
+        show_restart=show_restart,
+        admin_mode=is_admin_mode,
+        show_eid_info=SHOW_EID_INFO
     ))
 
     # Persist ?lang=xx into cookie
     qlang = request.args.get("lang")
     if qlang in SUPPORTED_LOCALES:
         resp.set_cookie("lang", qlang, max_age=30*24*3600)  # 30 days
+    # Persist admin mode if provided via query param
+    if param_admin and ADMIN_KEY and param_admin == ADMIN_KEY:
+        resp.set_cookie("admin", ADMIN_KEY, max_age=7*24*3600)  # 7 days
     return resp
 
 
@@ -1776,7 +1970,16 @@ def stats():
         has_admin = is_admin()
     except Exception:
         has_admin = False
-    
+    # App-level admin mode flag (used later for admin-only features)
+    admin_mode = False
+    try:
+        param_admin = request.args.get("admin")
+        cookie_admin = request.cookies.get("admin")
+        if (param_admin and ADMIN_KEY and param_admin == ADMIN_KEY) or (cookie_admin and ADMIN_KEY and cookie_admin == ADMIN_KEY):
+            admin_mode = True
+    except Exception:
+        admin_mode = False
+
     return render_template(
         "stats.html",
         show_restart=ENABLE_RESTART and has_admin,
@@ -1784,7 +1987,8 @@ def stats():
         app_version=VERSION,
         update_available=UPDATE_AVAILABLE,
         latest_version=LATEST_VERSION,
-        latest_url=LATEST_URL
+        latest_url=LATEST_URL,
+        admin_mode=admin_mode
     )
 
 
