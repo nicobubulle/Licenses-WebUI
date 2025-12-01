@@ -589,19 +589,26 @@ _stats_last_state = {}  # Track last stored state per feature to detect changes
 _eid_cache = {}
 _eid_cache_timestamp = 0
 EID_CACHE_DURATION = 24 * 3600  # 24 hours in seconds
+_clm_available = None  # None = unknown, True = working, False = failed
 
 def refresh_eid_cache():
     """Refresh the EID cache by running CLM query-features command."""
-    global _eid_cache, _eid_cache_timestamp
+    global _eid_cache, _eid_cache_timestamp, _clm_available
     try:
         clm_output = try_clm_query_features()
         if clm_output:
             _eid_cache = parse_eid_info(clm_output)
             _eid_cache_timestamp = time.time()
+            _clm_available = True
             logger.info(f"EID cache refreshed: {len(_eid_cache)} features")
             return True
+        else:
+            # CLM command failed or returned nothing
+            _clm_available = False
+            logger.warning("CLM query-features failed or returned no data - EID features will be hidden")
     except Exception as e:
-        logger.error(f"Failed to refresh EID cache: {e}")
+        _clm_available = False
+        logger.error(f"Failed to refresh EID cache: {e} - EID features will be hidden")
     return False
 
 def get_eid_info():
@@ -1868,13 +1875,16 @@ def index():
     elif cookie_admin and ADMIN_KEY and cookie_admin == ADMIN_KEY:
         is_admin_mode = True
 
+    # Only show EID features if CLM is available
+    show_eid = (SHOW_EID_INFO or is_admin_mode) and _clm_available is not False
+    
     resp = make_response(render_template(
         "index.html",
         refresh_minutes=REFRESH_MIN,
         service_msg=service_msg,
         show_restart=show_restart,
         admin_mode=is_admin_mode,
-        show_eid_info=SHOW_EID_INFO
+        show_eid_info=show_eid
     ))
 
     # Persist ?lang=xx into cookie
@@ -1905,14 +1915,14 @@ def status():
 
             filtered[name] = item
         
-        # Get EID information from cache
-        eid_data = get_eid_info()
+        # Get EID information from cache (only if CLM is available)
+        eid_data = get_eid_info() if _clm_available else {}
 
         return jsonify({
             "ok": True,
             "last_update": _last_update,
             "licenses": filtered,
-            "eid_info": {fname: list(eids) for fname, eids in eid_data.items()}
+            "eid_info": {fname: list(eids) for fname, eids in eid_data.items()} if _clm_available else {}
         })
 
 
@@ -2019,6 +2029,11 @@ def eids_page():
 
     if not admin_mode:
         # Non-admins are redirected to dashboard
+        return redirect(url_for("index"))
+
+    # If CLM is unavailable, redirect to dashboard
+    if _clm_available is False:
+        logger.warning("EID page accessed but CLM is unavailable - redirecting to dashboard")
         return redirect(url_for("index"))
 
     # Build EID -> features detailed mapping using cached EID info and current license data
@@ -2195,7 +2210,8 @@ def refresh_eid_route():
         if success:
             return jsonify({"ok": True, "message": "EID cache refreshed successfully"})
         else:
-            return jsonify({"ok": False, "error": "Failed to refresh EID cache"}), 500
+            error_msg = "CLM query-features command failed or is unavailable" if _clm_available is False else "Failed to refresh EID cache"
+            return jsonify({"ok": False, "error": error_msg}), 500
     except Exception as e:
         logger.error(f"EID refresh error: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500

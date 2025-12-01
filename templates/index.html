@@ -43,9 +43,9 @@
     .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-danger { background: linear-gradient(180deg,var(--danger),#b02a37); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
-    .btn-stats { background: linear-gradient(180deg,#6f42c1,#5a32a3); color:#fff; border:1px solid rgba(0,0,0,0.08); }
+    .btn-stats { background: linear-gradient(180deg,#6f42c1,#5a32a3); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-stats img { filter: brightness(0) invert(1); }
-    .btn-eid { background: linear-gradient(180deg,#20c997,#148f6f); color:#fff; border:1px solid rgba(0,0,0,0.08); }
+    .btn-eid { background: linear-gradient(180deg,#20c997,#148f6f); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-eid img { filter: brightness(0) invert(1); }
 
     /* Spinner */
@@ -260,27 +260,28 @@
       <div class="small">{{ _('auto_refresh', minutes=refresh_minutes) }}</div>
 
       <button id="btn-refresh" class="btn btn-primary" title="{{ _('refresh_title') }}" aria-label="{{ _('refresh_title') }}">
-        <img src="{{ url_for('static', filename='refresh.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
-        <span id="btn-refresh-label">{{ _('refresh_label') }}</span>
+      <img src="{{ url_for('static', filename='refresh.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+      <span id="btn-refresh-label">{{ _('refresh_label') }}</span>
       </button>
 
       {% if show_restart %}
       <button id="btn-restart" class="btn btn-danger" title="{{ _('restart_title') }}" aria-label="{{ _('restart_title') }}">
-        <img src="{{ url_for('static', filename='restart.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
-        {{ _('restart_label') }}
+      <img src="{{ url_for('static', filename='restart.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+      <span>{{ _('restart_label') }}</span>
       </button>
       {% endif %}
 
       {% if admin_mode %}
-      <a href="{{ url_for('eids_page') }}" class="btn btn-eid" title="EID Overview" aria-label="EID Overview">
-        <img src="{{ url_for('static', filename='key.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
-        <span>EIDs</span>
-      </a>
+      <button id="btn-eids" class="btn btn-eid" title="{{ _('eid_overview_title') }}" aria-label="{{ _('eid_overview_title') }}">
+      <img src="{{ url_for('static', filename='key.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+      <span>EIDs</span>
+      </button>
       {% endif %}
-      <a href="{{ url_for('stats') }}" class="btn btn-stats" title="{{ _('view_statistics') }}" aria-label="{{ _('view_statistics') }}">
-        <img src="{{ url_for('static', filename='graph.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
-        <span>{{ _('statistics') }}</span>
-      </a>
+      
+      <button id="btn-stats" class="btn btn-stats" title="{{ _('view_statistics') }}" aria-label="{{ _('view_statistics') }}">
+      <img src="{{ url_for('static', filename='graph.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
+      <span>{{ _('statistics') }}</span>
+      </button>
     </div>
   </header>
 
@@ -392,10 +393,20 @@ const btnRefreshLabel = document.getElementById("btn-refresh-label");
 const btnRestart = document.getElementById("btn-restart");
 const btnRefreshEid = document.getElementById("btn-refresh-eid");
 const btnRefreshEidLabel = document.getElementById("btn-refresh-eid-label");
+const btnEids = document.getElementById("btn-eids");
+const btnStats = document.getElementById("btn-stats");
 const toast = document.getElementById("toast");
 
 let refreshing = false;
 let refreshingEid = false;
+
+// Navigation handlers
+if (btnEids) {
+  btnEids.addEventListener("click", () => window.location.href = "{{ url_for('eids_page') }}");
+}
+if (btnStats) {
+  btnStats.addEventListener("click", () => window.location.href = "{{ url_for('stats') }}");
+}
 
 function showToast(text, timeout=4000){
   toast.textContent = text;

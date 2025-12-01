@@ -105,7 +105,11 @@ The application automatically tracks license usage changes in a SQLite database 
 Access the dashboard via the "📊 Statistics" button in the main UI toolbar.
 
 ## EID Information
-The application tracks Enterprise ID (EID) information from lmstat output and provides a dedicated admin-only overview page.
+The application tracks Entitlement ID (EID) information from CLM query-features output and provides a dedicated admin-only overview page.
+
+**Requirements:**
+- CLM version 2.20 or higher is required for EID functionality
+- If CLM is outdated or unavailable, EID features will be automatically hidden
 
 **Features:**
 - Maps each EID to its associated features with group icons
