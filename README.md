@@ -11,6 +11,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 ## Features
 - Periodic background refresh of lmstat output
 - Manual refresh (runs same parsing + notification checkers as background loop)
+- **Version Display**: Shows both feature version (🔑) and application version (💻) for each user checkout
 - **Statistics Dashboard**: Track and visualize license usage over time with interactive graphs (SQLite storage)
 - **EID Information**: View detailed EID (Enterprise ID) mappings with feature grouping and license totals (admin-only)
 - **Application Admin Mode**: Secure admin access via randomly generated MD5 key for sensitive features
@@ -58,9 +59,10 @@ schtasks /create /tn "Licenses WebUI" /tr "C:\path\to\Licenses_WebUI.exe" /sc on
 - `default_locale`: Fallback UI locale (`en`, `fr`, `de`, `es`).
 - `admin_key`: Auto-generated random MD5 hash for app-level admin authentication (do not share).
 - `show_eid_info`: `yes|no` show EID info button to non-admin users (default `no`).
-- `hide_maintenance`: `yes|no` hide features containing `maint` and suppress related notifications.
 - `hide_list`: Comma-separated substrings; any feature containing one is hidden.
 - `enable_restart`: Enable Windows service restart button (requires OS admin elevation on startup).
+
+**Note:** Maintenance features (containing 'maint') are always hidden from display. Users who only have maintenance checkouts (no standard feature) will appear in the standard feature list with a 🔴 indicator.
 
 ### SERVICE section
 - `service_name`: Display + target for restart functionality.
@@ -100,9 +102,27 @@ The application automatically tracks license usage changes in a SQLite database 
 - Configurable time ranges (1 hour to 30 days)
 - Auto-refresh every 5 minutes
 - Storage only occurs when usage values change (efficient storage)
-- Respects `hide_maintenance` and `hide_list` settings
+- Respects `hide_list` settings (maintenance features are always excluded)
 
 Access the dashboard via the "📊 Statistics" button in the main UI toolbar.
+
+## Version Information Display
+Each user checkout displays detailed version information with visual indicators:
+
+**Version Types:**
+- **🔑 Feature Version**: The version of the license feature itself (e.g., v2024.0411)
+- **💻 Application Version**: The version of the application the user is running (e.g., v2023.1101)
+
+Both versions are extracted from lmstat output and displayed inline with user information. If version information is unavailable, the UI shows "version unknown" (localized to the user's language).
+
+**Maintenance Status Indicators:**
+Users are marked with colored icons indicating their maintenance status:
+- **⚫ Gray**: Multiple standard features without maintenance
+- **🟢 Green**: Has both standard and maintenance features (same version or different versions shown in tooltip)
+- **🟠 Orange**: Only has standard feature (no maintenance)
+- **🔴 Red**: Only has maintenance feature (automatically moved to standard feature list)
+
+Hover over any maintenance icon to see detailed status information in your preferred language.
 
 ## EID Information
 The application tracks Entitlement ID (EID) information from CLM query-features output and provides a dedicated admin-only overview page.

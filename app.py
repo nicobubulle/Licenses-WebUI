@@ -94,7 +94,6 @@ DEFAULT_CONFIG = {
         "web_port": str(DEFAULT_WEB_PORT),
         "refresh_minutes": str(DEFAULT_REFRESH),
         "default_locale": "en",
-        "hide_maintenance": "yes",
         "hide_list": "",
         "enable_restart": "no",
         "show_eid_info": "no",
@@ -268,9 +267,6 @@ refresh_minutes = 5
 # Default UI language (en, fr, de, es)
 default_locale = en
 
-# Hide features containing 'maint' (yes/no)
-hide_maintenance = yes
-
 # Comma-separated substrings of features to hide
 hide_list =
 
@@ -362,11 +358,6 @@ try:
     DEFAULT_LOCALE_RAW = cfg.get("SETTINGS", "default_locale", fallback="en").strip().lower().split("-")[0]
 except Exception:
     DEFAULT_LOCALE_RAW = "en"
-
-try:
-    HIDE_MAINT = cfg.get("SETTINGS", "hide_maintenance", fallback="no").lower() in ("1", "yes", "true")
-except Exception:
-    HIDE_MAINT = False
 
 try:
     hide_list_str = cfg.get("SETTINGS", "hide_list", fallback="")
@@ -651,7 +642,7 @@ def init_stats_db():
 
 def store_feature_stats(licenses_data):
     """Store feature usage stats only when values change.
-    Respects HIDE_MAINT and HIDE_LIST exclusions.
+    Respects HIDE_LIST exclusions. Maintenance features are always excluded.
     """
     global _stats_last_state
     try:
@@ -662,8 +653,8 @@ def store_feature_stats(licenses_data):
         for feature_name, data in licenses_data.items():
             lname = feature_name.lower()
             
-            # Skip maintenance features if configured
-            if HIDE_MAINT and 'maint' in lname:
+            # Skip maintenance features (always hidden)
+            if 'maint' in lname:
                 continue
             
             # Skip features in hide list
@@ -1314,11 +1305,9 @@ def try_lmstat_commands():
     Raises: RuntimeError if all attempts fail
     """
     exe_dir = os.path.dirname(LMUTIL_PATH) or None
-
     commands = [
         [LMUTIL_PATH, "lmstat", "-a", "-c", f"{LM_PORT}@localhost"],
     ]
-
     last_err = None
     for cmd in commands:
         try:
@@ -1342,7 +1331,6 @@ def try_lmstat_commands():
         except Exception as e:
             last_err = f"Error: {' '.join(cmd)} - {e}"
             logger.debug(last_err)
-
     raise RuntimeError(last_err or "No lmstat command succeeded")
 
 
@@ -1361,14 +1349,25 @@ def parse_lmstat(raw_text):
         r"Users of\s+(.+?):\s*\(Total of\s+(\d+).*?Total of\s+(\d+)\s+licenses? in use",
         re.IGNORECASE
     )
-    re_expiry = re.compile(r'expiry:\s*([0-9A-Za-z\-\s]+)', re.IGNORECASE)
-    re_named_block = re.compile(r'^"([^"]+)"')
-    re_user = re.compile(
-        r'^\s*([^\s]+)\s+([^\s]+).*?\(v?([0-9A-Za-z\.\-]+)\).*?start\s+(.+)',
+    re_named_block = re.compile(r'^\s*"([^"]+)"')
+    re_feature_version = re.compile(r'^\s*"[^"]+"\s+v?([0-9A-Za-z\.\-]+)', re.IGNORECASE)
+    # Also try to extract version from any line with format: FEATURE_NAME vVERSION or (vVERSION)
+    re_version_anywhere = re.compile(r'\s+v?([0-9A-Za-z\.\-]+)\s*\(', re.IGNORECASE)
+    # Match user lines where host appears in parentheses after version, e.g.:
+    #   n.khodja 2024-12-01 2024-12-01 (v2023.1101) (WS7NKHODJ/27000 1315), start Sun 12/1 13:39
+    # Format A: username, two tokens (often dates), then (vVERSION) (HOST/PORT PID), start ...
+    re_user_fmtA = re.compile(
+        r'^\s*(?P<user>.+?)\s+\S+\s+\S+\s+\(v?(?P<appver>[0-9A-Za-z\.\-]+)\)\s+\((?P<host>[^/\)\s]+)[^\)]*\),\s*start\s+(?P<start>.+)',
+        re.IGNORECASE
+    )
+    # Format B: username directly before (vVERSION) (HOST ...) when the intermediate tokens are absent
+    re_user_fmtB = re.compile(
+        r'^\s*(?P<user>.+?)\s+\(v?(?P<appver>[0-9A-Za-z\.\-]+)\)\s+\((?P<host>[^/\)\s]+)[^\)]*\),\s*start\s+(?P<start>.+)',
         re.IGNORECASE
     )
 
     current = None
+    current_feature_version = None
 
     for line in lines:
         m = re_feature.search(line)
@@ -1376,33 +1375,181 @@ def parse_lmstat(raw_text):
             name = m.group(1).strip()
             total = int(m.group(2))
             used = int(m.group(3))
-            features.setdefault(name, {"total": total, "used": used, "expiry": None, "users": []})
+            features.setdefault(name, {"total": total, "used": used, "users": []})
             current = name
+            current_feature_version = None  # Reset, will be set by next quoted line
             continue
 
         m2 = re_named_block.search(line)
         if m2:
-            current = m2.group(1).strip()
-            features.setdefault(current, {"total": None, "used": None, "expiry": None, "users": []})
+            feature_name = m2.group(1).strip()
+            # Heuristic: Inside a Users of <current> block, the next quoted line carries the version.
+            if current:
+                m_ver = re_feature_version.search(line)
+                if m_ver:
+                    current_feature_version = m_ver.group(1).strip()
+            else:
+                # Quoted feature outside an active block -> treat as new feature block without totals
+                current = feature_name
+                features.setdefault(current, {"total": None, "used": None, "users": []})
+                m_ver = re_feature_version.search(line)
+                if m_ver:
+                    current_feature_version = m_ver.group(1).strip()
+                else:
+                    current_feature_version = None
             continue
 
-        m3 = re_expiry.search(line)
-        if m3 and current:
-            features[current]["expiry"] = m3.group(1).strip()
-            continue
-
-        m4 = re_user.search(line)
+        m4 = re_user_fmtA.search(line) or re_user_fmtB.search(line)
         if m4 and current:
-            features[current]["users"].append({
-                "user": m4.group(1).strip(),
-                "computer": m4.group(2).strip(),
-                "version": m4.group(3).strip(),
-                "start": m4.group(4).strip()
-            })
+            user_data = {
+                "user": m4.group('user').strip(),
+                "computer": m4.group('host').strip(),
+                "app_version": m4.group('appver').strip(),
+                "feature_version": current_feature_version,
+                "start": m4.group('start').strip()
+            }
+            features[current]["users"].append(user_data)
             continue
 
     logger.debug(f"Parsed {len(features)} license features")
+    
+    # Add maintenance status check for each user
+    _add_maintenance_status(features)
+    
     return features
+
+
+def _add_maintenance_status(features):
+    """
+    Check maintenance status for each user in each feature.
+    
+    Adds 'maintenance_status' field to each user with one of these values:
+    - "none": Feature has no maintenance variant
+    - "ok": User has both standard and maintenance, same version
+    - "ok_different": User has both, but different versions (returns maint version)
+    - "no_maintenance": User has only standard feature
+    - "no_standard": User has only maintenance feature
+    """
+    # Build a map of feature pairs: {base_name: {"standard": feature_name, "maint": feature_name}}
+    feature_pairs = {}
+    maint_features = set()
+    
+    for feature_name in features.keys():
+        lname = feature_name.lower()
+        if 'maint' in lname:
+            maint_features.add(feature_name)
+            # Extract base name (remove maint-related parts)
+            # Handle patterns like "FEATURE_Maint" or "FEATURE.Maint" or "FEATURE-Maint"
+            base = feature_name.replace('_Maint', '').replace('.Maint', '').replace('-Maint', '')
+            base = base.replace('_MAINT', '').replace('.MAINT', '').replace('-MAINT', '')
+            if base not in feature_pairs:
+                feature_pairs[base] = {"standard": None, "maint": None}
+            feature_pairs[base]["maint"] = feature_name
+    
+    # Find standard features that have maintenance counterparts
+    for feature_name in features.keys():
+        if feature_name not in maint_features:
+            # Check if there's a corresponding maintenance feature
+            for base, pair in feature_pairs.items():
+                if pair["standard"] is None:
+                    # Check if this feature matches the base (could be exact match or close)
+                    if feature_name == base or feature_name.replace('_', '').replace('.', '').replace('-', '').lower() == base.replace('_', '').replace('.', '').replace('-', '').lower():
+                        pair["standard"] = feature_name
+                        break
+            else:
+                # No maintenance variant found, mark as standalone
+                feature_pairs[feature_name] = {"standard": feature_name, "maint": None}
+    
+    # Now check each user's maintenance status
+    for feature_name, feature_data in features.items():
+        # Find which pair this feature belongs to
+        is_maint = feature_name in maint_features
+        base_name = None
+        pair_info = None
+        
+        for base, pair in feature_pairs.items():
+            if pair["standard"] == feature_name or pair["maint"] == feature_name:
+                base_name = base
+                pair_info = pair
+                break
+        
+        if not pair_info:
+            # Standalone feature with no pair
+            for user in feature_data.get("users", []):
+                user["maintenance_status"] = "none"
+            continue
+        
+        standard_feature = pair_info["standard"]
+        maint_feature = pair_info["maint"]
+        
+        # If this feature has no maintenance variant
+        if maint_feature is None:
+            for user in feature_data.get("users", []):
+                user["maintenance_status"] = "none"
+            continue
+        
+        # Build a map of users for both standard and maintenance features
+        standard_users = {}  # {(user, computer): user_data}
+        maint_users = {}
+        
+        if standard_feature and standard_feature in features:
+            for user in features[standard_feature].get("users", []):
+                key = (user["user"], user["computer"])
+                standard_users[key] = user
+        
+        if maint_feature and maint_feature in features:
+            for user in features[maint_feature].get("users", []):
+                key = (user["user"], user["computer"])
+                maint_users[key] = user
+        
+        # Check status for each user in current feature
+        for user in feature_data.get("users", []):
+            key = (user["user"], user["computer"])
+            
+            has_standard = key in standard_users
+            has_maint = key in maint_users
+            
+            if has_standard and has_maint:
+                # User has both, check versions
+                std_version = standard_users[key].get("feature_version")
+                maint_version = maint_users[key].get("feature_version")
+                
+                if std_version == maint_version:
+                    user["maintenance_status"] = "ok"
+                else:
+                    user["maintenance_status"] = "ok_different"
+                    user["maintenance_version"] = maint_version
+            elif has_standard and not has_maint:
+                user["maintenance_status"] = "no_maintenance"
+            elif not has_standard and has_maint:
+                user["maintenance_status"] = "no_standard"
+            else:
+                # Shouldn't happen, but fallback
+                user["maintenance_status"] = "none"
+    
+    # Move users with "no_standard" status from maintenance features to standard features
+    for feature_name in list(features.keys()):
+        if feature_name in maint_features and feature_name in features:
+            # Find the corresponding standard feature
+            standard_feature_name = None
+            for base, pair in feature_pairs.items():
+                if pair["maint"] == feature_name and pair["standard"]:
+                    standard_feature_name = pair["standard"]
+                    break
+            
+            if standard_feature_name and standard_feature_name in features:
+                # Move users with "no_standard" status to the standard feature
+                users_to_move = []
+                for user in features[feature_name].get("users", []):
+                    if user.get("maintenance_status") == "no_standard":
+                        users_to_move.append(user)
+                
+                # Add these users to the standard feature
+                if users_to_move:
+                    features[standard_feature_name]["users"].extend(users_to_move)
+                    logger.debug(f"Moved {len(users_to_move)} users from {feature_name} to {standard_feature_name}")
+    
+    logger.debug("Added maintenance status to user records")
 
 
 # ---------- Background Refresh ----------
@@ -1629,7 +1776,8 @@ def check_extratime(parsed_data):
         lname = feature_name.lower()
         if lname in exclusions:
             continue
-        if HIDE_MAINT and 'maint' in lname:
+        # Skip maintenance features (always hidden)
+        if 'maint' in lname:
             continue
         for u in data.get("users", []):
             start_ts = _parse_start_timestamp(u.get("start"))
@@ -1684,7 +1832,8 @@ def check_soldout(parsed_data):
         lname = feature_name.lower()
         if lname in exclusions:
             continue
-        if HIDE_MAINT and 'maint' in lname:
+        # Skip maintenance features (always hidden)
+        if 'maint' in lname:
             continue
         total = data.get("total")
         used = data.get("used")
@@ -1741,7 +1890,8 @@ def check_duplicates(parsed_data):
     
     for feature_name, feature_data in parsed_data.items():
         lname = feature_name.lower()
-        if HIDE_MAINT and 'maint' in lname:
+        # Skip maintenance features (always hidden)
+        if 'maint' in lname:
             continue
         users = feature_data.get("users", [])
         if len(users) < 2:
@@ -1907,7 +2057,8 @@ def status():
         for name, item in _parsed.items():
             lname = name.lower()
 
-            if HIDE_MAINT and "maint" in lname:
+            # Always hide maintenance features
+            if "maint" in lname:
                 continue
 
             if any(h.lower() in lname for h in HIDE_LIST):

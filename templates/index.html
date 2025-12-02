@@ -68,7 +68,12 @@
     th, td { border-bottom:1px solid var(--border); padding:10px; vertical-align:top; text-align:left; }
     th { background:#fbfbfb; font-weight:700; font-size:0.95em; }
     .users { font-size: 0.95em; color: #111; }
-    .user-line { margin-bottom: 6px; }
+    .user-line { margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+    .maint-icon { font-size: 1em; line-height: 1; }
+    .maint-none { color: #888; } /* ⚫ Multiple features without maintenance */
+    .maint-ok { color: #28a745; } /* 🟢 Both standard and maintenance */
+    .maint-no-maintenance { color: #fd7e14; } /* 🟠 Only standard */
+    .maint-no-standard { color: #dc3545; } /* 🔴 Only maintenance */
     .toast { position:fixed; right:12px; bottom:12px; background:#222; color:#fff; padding:10px 14px; border-radius:8px; box-shadow:0 6px 18px rgba(0,0,0,0.12); display:none; max-width:320px; white-space:pre-wrap; }
 
     /* service message box */
@@ -543,7 +548,53 @@ async function fetchStatus(){
           let usersHtml = "";
           if (item.users && item.users.length>0) {
             for (const u of item.users) {
-              usersHtml += `<div class="user-line">${u.user} @ ${u.computer} — v${u.version} — ${u.start}</div>`;
+              // Determine maintenance status icon
+              let maintIcon = '';
+              let maintClass = '';
+              let maintTooltip = '';
+              
+              if (u.maintenance_status === 'none') {
+                maintIcon = '⚫';
+                maintClass = 'maint-none';
+                maintTooltip = t('maint_none');
+              } else if (u.maintenance_status === 'ok') {
+                maintIcon = '🟢';
+                maintClass = 'maint-ok';
+                maintTooltip = t('maint_ok');
+              } else if (u.maintenance_status === 'ok_different') {
+                maintIcon = '🟢';
+                maintClass = 'maint-ok';
+                const maintVer = u.maintenance_version || 'unknown';
+                maintTooltip = t('maint_ok_different').replace('{version}', maintVer);
+              } else if (u.maintenance_status === 'no_maintenance') {
+                maintIcon = '🟠';
+                maintClass = 'maint-no-maintenance';
+                maintTooltip = t('maint_no_maintenance');
+              } else if (u.maintenance_status === 'no_standard') {
+                maintIcon = '🔴';
+                maintClass = 'maint-no-standard';
+                maintTooltip = t('maint_no_standard');
+              }
+              
+              // Build version info with icons
+              const appVersion = u.app_version || u.version || null;
+              const featureVersion = u.feature_version || null;
+              
+              let versionInfo = '';
+              if (featureVersion) {
+                versionInfo += `🔑 v${featureVersion}`;
+              }
+              if (appVersion) {
+                if (versionInfo) versionInfo += ' ';
+                versionInfo += `💻 v${appVersion}`;
+              }
+              if (!versionInfo) {
+                versionInfo = t('version_unknown');
+              }
+              
+              const maintIconHtml = maintIcon ? `<span class="maint-icon ${maintClass}" title="${maintTooltip}">${maintIcon}</span>` : '';
+              
+              usersHtml += `<div class="user-line">${maintIconHtml}<span>${u.user} @ ${u.computer} — ${versionInfo} — ${u.start}</span></div>`;
             }
           } else {
             usersHtml = `<div class='small'>${t('no_users')}</div>`;

@@ -66,5 +66,11 @@
   "other_features": "Autres fonctionnalités",
   "total_label": "total",
   "app_admin_mode": "Mode admin app",
-  "update_available_label": "Mise à jour disponible : v{version}"
+  "update_available_label": "Mise à jour disponible : v{version}",
+  "version_unknown": "version inconnue",
+  "maint_none": "Plusieurs fonctionnalités standard sans maintenance",
+  "maint_ok": "Standard et maintenance (même version)",
+  "maint_ok_different": "Standard et maintenance (maint: v{version})",
+  "maint_no_maintenance": "Seulement fonctionnalité standard",
+  "maint_no_standard": "Seulement fonctionnalité de maintenance"
 }

@@ -52,7 +52,7 @@ Key descriptions:
 - `soldout_exclusion`: Comma-separated features excluded from sold-out transitions.
 
 Global filters affecting notifications:
-- `hide_maintenance = yes` suppresses any feature containing `maint` from display AND all notifications.
+- Maintenance features (containing `maint`) are always hidden from display and excluded from all notifications.
 - `hide_list` substrings also hide features and suppress related notifications.
 
 ## 5. Adaptive Card Structure
