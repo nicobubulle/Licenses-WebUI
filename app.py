@@ -582,6 +582,11 @@ _eid_cache_timestamp = 0
 EID_CACHE_DURATION = 24 * 3600  # 24 hours in seconds
 _clm_available = None  # None = unknown, True = working, False = failed
 
+# License version information cache
+_license_versions_cache = {}
+_license_versions_timestamp = 0
+LICENSE_VERSIONS_CACHE_DURATION = 24 * 3600  # 24 hours in seconds
+
 def refresh_eid_cache():
     """Refresh the EID cache by running CLM query-features command."""
     global _eid_cache, _eid_cache_timestamp, _clm_available
@@ -688,7 +693,7 @@ def store_feature_stats(licenses_data):
         logger.error(f"Failed to store feature stats: {e}")
 
 # Application version and GitHub repo for update checks
-VERSION = "1.5"
+VERSION = "1.6"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 LATEST_VERSION = VERSION
@@ -1295,6 +1300,113 @@ try:
     refresh_eid_cache()
 except Exception as _e:
     logger.debug(f"Initial EID cache refresh failed (non-fatal): {_e}")
+
+
+def try_lmstat_no_user():
+    """
+    Execute lmstat -a --no-user-info to get license version information.
+    
+    Returns: Raw lmstat output text or None if command fails
+    """
+    exe_dir = os.path.dirname(LMUTIL_PATH) or None
+    cmd = [LMUTIL_PATH, "lmstat", "-a", "--no-user-info", "-c", f"{LM_PORT}@localhost"]
+    
+    try:
+        out = subprocess.check_output(
+            cmd,
+            cwd=exe_dir,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=LMSTAT_TIMEOUT,
+            **_SUBP_NO_WINDOW_KW
+        )
+        logger.debug(f"lmstat --no-user-info command succeeded")
+        return out
+    except subprocess.CalledProcessError as e:
+        logger.debug(f"lmstat --no-user-info failed: {getattr(e, 'output', str(e))}")
+        return None
+    except subprocess.TimeoutExpired:
+        logger.debug(f"lmstat --no-user-info timeout")
+        return None
+    except Exception as e:
+        logger.debug(f"lmstat --no-user-info error: {e}")
+        return None
+
+
+def parse_license_versions(raw_text):
+    """
+    Parse lmstat --no-user-info output to extract feature versions and quantities.
+    
+    Returns: Dict mapping feature names to dict of {version: quantity}
+    Example: {"Infinity_ImpExp.SmartWorx": {"v2020.1219": 1, "v2021.0202": 1, "v2022.0914": 2}}
+    """
+    if not raw_text:
+        return {}
+    
+    feature_versions = {}
+    
+    # Pattern: Feature "FeatureName" vVERSION, ... (Total of N licenses issued; ...)
+    # Example: Feature "Infinity_Adjustment.1D" v2022.0914, vendor: LGS, expiry: permanent(no expiration date) (Total of 2 licenses issued;  Total of 1 floating non-reserved license in use)
+    pattern = re.compile(
+        r'^Feature\s+"([^"]+)"\s+v?([0-9A-Za-z\.\-]+),.*?\(Total of\s+(\d+)\s+licenses? issued',
+        re.IGNORECASE
+    )
+    
+    for line in raw_text.splitlines():
+        match = pattern.search(line)
+        if match:
+            feature_name = match.group(1).strip()
+            version = match.group(2).strip()
+            quantity = int(match.group(3))
+            
+            if feature_name not in feature_versions:
+                feature_versions[feature_name] = {}
+            
+            # Aggregate quantities for the same version
+            if version in feature_versions[feature_name]:
+                feature_versions[feature_name][version] += quantity
+            else:
+                feature_versions[feature_name][version] = quantity
+    
+    logger.debug(f"Parsed license versions for {len(feature_versions)} features")
+    return feature_versions
+
+
+def refresh_license_versions_cache():
+    """Refresh the license versions cache by running lmstat --no-user-info command."""
+    global _license_versions_cache, _license_versions_timestamp
+    try:
+        lmstat_output = try_lmstat_no_user()
+        if lmstat_output:
+            _license_versions_cache = parse_license_versions(lmstat_output)
+            _license_versions_timestamp = time.time()
+            logger.info(f"License versions cache refreshed: {len(_license_versions_cache)} features")
+            return True
+        else:
+            logger.warning("lmstat --no-user-info failed or returned no data")
+    except Exception as e:
+        logger.error(f"Failed to refresh license versions cache: {e}")
+    return False
+
+
+def get_license_versions():
+    """Get license version information from cache, refreshing if needed."""
+    global _license_versions_cache, _license_versions_timestamp
+    
+    # Check if cache needs refresh (older than 24h or empty)
+    cache_age = time.time() - _license_versions_timestamp
+    if not _license_versions_cache or cache_age > LICENSE_VERSIONS_CACHE_DURATION:
+        logger.debug(f"License versions cache stale (age: {cache_age:.0f}s), refreshing...")
+        refresh_license_versions_cache()
+    
+    return _license_versions_cache
+
+
+# Perform initial license versions cache refresh
+try:
+    refresh_license_versions_cache()
+except Exception as _e:
+    logger.debug(f"Initial license versions cache refresh failed (non-fatal): {_e}")
 
 
 def try_lmstat_commands():
@@ -2068,12 +2180,16 @@ def status():
         
         # Get EID information from cache (only if CLM is available)
         eid_data = get_eid_info() if _clm_available else {}
+        
+        # Get license version information from cache
+        license_versions = get_license_versions()
 
         return jsonify({
             "ok": True,
             "last_update": _last_update,
             "licenses": filtered,
-            "eid_info": {fname: list(eids) for fname, eids in eid_data.items()} if _clm_available else {}
+            "eid_info": {fname: list(eids) for fname, eids in eid_data.items()} if _clm_available else {},
+            "license_versions": license_versions
         })
 
 
@@ -2365,6 +2481,21 @@ def refresh_eid_route():
             return jsonify({"ok": False, "error": error_msg}), 500
     except Exception as e:
         logger.error(f"EID refresh error: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/refresh-license-versions", methods=["POST"])
+def refresh_license_versions_route():
+    """Manually refresh license versions cache."""
+    logger.info("Manual license versions refresh requested")
+    try:
+        success = refresh_license_versions_cache()
+        if success:
+            return jsonify({"ok": True, "message": "License versions refreshed successfully"})
+        else:
+            return jsonify({"ok": False, "error": "Failed to refresh license versions"}), 500
+    except Exception as e:
+        logger.error(f"License versions refresh error: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

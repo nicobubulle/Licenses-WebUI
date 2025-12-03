@@ -72,5 +72,11 @@
   "maint_ok": "Standard et maintenance (même version)",
   "maint_ok_different": "Standard et maintenance (maint: v{version})",
   "maint_no_maintenance": "Seulement fonctionnalité standard",
-  "maint_no_standard": "Seulement fonctionnalité de maintenance"
+  "maint_no_standard": "Seulement fonctionnalité de maintenance",
+  "license_versions": "Versions de licence",
+  "refresh_license_versions": "Actualiser les informations de version de licence",
+  "users_count_suffix": "s",
+  "latest_release": "Dernière version : v{version} ({date})",
+  "last_compatible_release": "Dernière version compatible : v{version} ({date})",
+  "users_count": "{n} utilisateur{suffix}"
 }

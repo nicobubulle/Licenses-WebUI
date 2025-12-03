@@ -12,6 +12,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - Periodic background refresh of lmstat output
 - Manual refresh (runs same parsing + notification checkers as background loop)
 - **Version Display**: Shows both feature version (🔑) and application version (💻) for each user checkout
+- **License Versions Column**: Displays per-feature version quantities from `lmstat -a --no-user-info` with 24h cache and unified refresh via the EID button
 - **Statistics Dashboard**: Track and visualize license usage over time with interactive graphs (SQLite storage)
 - **EID Information**: View detailed EID (Enterprise ID) mappings with feature grouping and license totals (admin-only)
 - **Application Admin Mode**: Secure admin access via randomly generated MD5 key for sensitive features
@@ -87,6 +88,7 @@ Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, e
 - `/status` — JSON status (licenses + last_update + eid_info)
 - `/refresh` — POST to force synchronous refresh
 - `/refresh-eid` — POST to manually refresh EID cache (24-hour TTL, admin-only)
+- `/refresh-license-versions` — POST to refresh license versions cache (24-hour TTL, admin-only)
 - `/restart` — POST to request service restart (OS admin + enable_restart required)
 - `/raw` — raw lmstat output for debugging
 - `/stats` — statistics dashboard with interactive graphs
@@ -162,6 +164,11 @@ Translation files live in `i18n/` as JSON. Supported locales are loaded from `ap
 3. Add locale code to `SUPPORTED_LOCALES` in `app.py` if needed.
 
 Locale negotiation: `?lang=xx` query param → `lang` cookie → `Accept-Language` → default.
+
+### Colorization and Tooltips
+- Feature versions are colorized according to release dates declared in `feature_groups.json` via a `releases` array like `{ "app_version": "2024.0411", "date": "2024-04-11" }`.
+- Tooltips are localized using i18n keys: `latest_release`, `last_compatible_release`, and `version_unknown`.
+- Users are grouped under the same `feature_version` within a feature, showing a localized count (`users_count` + `users_count_suffix`).
 
 ## Configuration details
 `config.ini` is created automatically with example values on first run. Missing configuration keys are automatically added with default values when the application starts, and a backup (`.bak`) is created before any updates. Edit and restart the application. Unknown keys are ignored. Percent symbols (%) in webhook URLs are preserved using raw read mode.
