@@ -684,12 +684,20 @@ async function fetchStatus(){
               
               // Users in this version
               for (const u of users) {
-                // Determine maintenance status icon
+                // Check if user is duplicate
+                const isDuplicate = u.is_duplicate || false;
+                
+                // Determine maintenance status icon (or duplicate warning)
                 let maintIcon = '';
                 let maintClass = '';
                 let maintTooltip = '';
                 
-                if (u.maintenance_status === 'none') {
+                if (isDuplicate) {
+                  // Override with duplicate warning
+                  maintIcon = '⚠️';
+                  maintClass = 'maint-duplicate';
+                  maintTooltip = t('duplicate_warning') || 'Duplicate checkout detected';
+                } else if (u.maintenance_status === 'none') {
                   maintIcon = '⚫';
                   maintClass = 'maint-none';
                   maintTooltip = t('maint_none');
@@ -724,7 +732,10 @@ async function fetchStatus(){
                 
                 const maintIconHtml = maintIcon ? `<span class="maint-icon ${maintClass}" title="${maintTooltip}">${maintIcon}</span>` : '';
                 
-                usersHtml += `<div class="user-line" style="margin-left: 16px;">${maintIconHtml}<span>${u.user} @ ${u.computer} — ${versionInfo} — ${u.start}</span></div>`;
+                // Apply duplicate styling
+                const duplicateStyle = isDuplicate ? ' style="color: red; font-weight: bold;"' : '';
+                
+                usersHtml += `<div class="user-line" style="margin-left: 16px;">${maintIconHtml}<span${duplicateStyle}>${u.user} @ ${u.computer} — ${versionInfo} — ${u.start}</span></div>`;
               }
             }
           } else {

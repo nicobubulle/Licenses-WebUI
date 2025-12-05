@@ -1793,7 +1793,35 @@ def parse_lmstat(raw_text):
     # Add maintenance status check for each user
     _add_maintenance_status(features)
     
+    # Mark duplicate users
+    _mark_duplicates(features)
+    
     return features
+
+
+def _mark_duplicates(features):
+    """
+    Mark users who have duplicate checkouts (same user@computer on same feature multiple times).
+    Adds 'is_duplicate' field to each user.
+    """
+    for feature_name, feature_data in features.items():
+        users = feature_data.get("users", [])
+        if len(users) < 2:
+            # No duplicates possible with fewer than 2 users
+            for user in users:
+                user["is_duplicate"] = False
+            continue
+        
+        # Count occurrences of each user@computer pair
+        user_computer_counts = {}
+        for u in users:
+            key = (u["user"], u["computer"])
+            user_computer_counts[key] = user_computer_counts.get(key, 0) + 1
+        
+        # Mark duplicates
+        for user in users:
+            key = (user["user"], user["computer"])
+            user["is_duplicate"] = user_computer_counts[key] > 1
 
 
 def _add_maintenance_status(features):

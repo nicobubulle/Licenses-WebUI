@@ -31,6 +31,7 @@
   "soldout_available_message" : "Feature **{feature}** no longer sold out ({used}/{total}).",
   "duplicate_title": "Duplicate License Checkout Detected",
   "duplicate_message": "**Feature:** {feature}\n**User:** {user}\n**Computer:** {computer}\n**Checkout count:** {count}",
+  "duplicate_warning": "Duplicate checkout detected",
   "footer_license": "MIT License",
   "footer_docs": "Documentation",
   "footer_admin_mode": "Administrator Mode",

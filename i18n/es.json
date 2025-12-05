@@ -31,6 +31,7 @@
   "soldout_available_message" : "La característica **{feature}** ya no está completamente utilizada ({used}/{total}).",
   "duplicate_title": "Detección de uso duplicado de licencia",
   "duplicate_message": "**Característica:** {feature}\n**Usuario:** {user}\n**Computadora:** {computer}\n**Cantidad de usos:** {count}",
+  "duplicate_warning": "Licencia duplicada detectada",
   "footer_license": "Licencia MIT",
   "footer_docs": "Documentación",
   "footer_admin_mode": "Modo Administrador",
