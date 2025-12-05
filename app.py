@@ -98,6 +98,9 @@ DEFAULT_CONFIG = {
         "enable_restart": "no",
         "show_eid_info": "no",
     },
+    "DATE_FORMAT": {
+        "format": "%d/%m/%Y %H:%M",
+    },
     "SERVICE": {
         "service_name": "FLEXnet License Server",
     },
@@ -272,6 +275,13 @@ hide_list =
 
 # Enable the Restart service button (yes/no)
 enable_restart = no
+
+[DATE_FORMAT]
+# Date and time format (Python strftime format)
+# Examples by language:
+#   US:  %%m/%%d/%%Y %%I:%%M %%p  -> 12/05/2025 02:26 PM
+#   EU:   %%d/%%m/%%Y %%H:%%M      -> 05/12/2025 14:26
+format = %%d/%%m/%%Y %%H:%%M
 
 [SERVICE]
 # Windows service name to restart
@@ -539,6 +549,15 @@ def send_teams_notification(title, message, link=None):
 SUPPORTED_LOCALES = ("en", "fr", "de", "es")
 DEFAULT_LOCALE = DEFAULT_LOCALE_RAW if 'DEFAULT_LOCALE_RAW' in globals() and DEFAULT_LOCALE_RAW in SUPPORTED_LOCALES else "en"
 TRANSLATIONS = {}
+
+# Load date format from config
+try:
+    DATE_FORMAT = cfg.get("DATE_FORMAT", "format", fallback="%d/%m/%Y %H:%M")
+except Exception as e:
+    logger.warning(f"Failed to load date format from config: {e}. Using default.")
+    DATE_FORMAT = "%d/%m/%Y %H:%M"
+
+logger.debug(f"Loaded date format: {DATE_FORMAT}")
 
 # Feature groups configuration
 FEATURE_GROUPS = {}
@@ -1448,6 +1467,86 @@ def try_lmstat_commands():
 
 # ---------- Parsing ----------
 
+def parse_start_date(start_str, locale="en"):
+    """
+    Parse lmstat start date and format according to locale with elapsed time.
+    
+    Input formats from lmstat:
+    - "Fri 12/5 14:26" (current year assumed)
+    - "Sun 12/1 13:39"
+    
+    Returns formatted date string with elapsed time in parentheses.
+    Example: "05/12/2025 14:26 (2h 15m)"
+    """
+    try:
+        # Parse the date string
+        # Format: "DayOfWeek Month/Day Hour:Minute"
+        parts = start_str.strip().split()
+        if len(parts) >= 3:
+            # Extract date and time parts
+            date_part = parts[1]  # e.g., "12/5"
+            time_part = parts[2]  # e.g., "14:26"
+            
+            # Add current year
+            current_year = datetime.datetime.now().year
+            month_day = date_part.split('/')
+            if len(month_day) == 2:
+                month = int(month_day[0])
+                day = int(month_day[1])
+                hour_min = time_part.split(':')
+                if len(hour_min) == 2:
+                    hour = int(hour_min[0])
+                    minute = int(hour_min[1])
+                    
+                    dt = datetime.datetime(current_year, month, day, hour, minute)
+                    
+                    # Calculate elapsed time
+                    now = datetime.datetime.now()
+                    elapsed = now - dt
+                    total_seconds = int(elapsed.total_seconds())
+                    
+                    # Format elapsed time based on duration
+                    if total_seconds < 0:
+                        # Future date (shouldn't happen, but handle it)
+                        elapsed_str = "0s"
+                    elif total_seconds < 60:
+                        # Less than 1 minute: show seconds
+                        elapsed_str = f"{total_seconds}s"
+                    elif total_seconds < 3600:
+                        # Less than 1 hour: show minutes (and seconds if not round)
+                        minutes = total_seconds // 60
+                        seconds = total_seconds % 60
+                        if seconds > 0:
+                            elapsed_str = f"{minutes}m {seconds}s"
+                        else:
+                            elapsed_str = f"{minutes}m"
+                    elif total_seconds < 86400:
+                        # Less than 1 day: show hours and minutes
+                        hours = total_seconds // 3600
+                        minutes = (total_seconds % 3600) // 60
+                        if minutes > 0:
+                            elapsed_str = f"{hours}h {minutes}m"
+                        else:
+                            elapsed_str = f"{hours}h"
+                    else:
+                        # 1 day or more: show days and hours
+                        days = total_seconds // 86400
+                        hours = (total_seconds % 86400) // 3600
+                        if hours > 0:
+                            elapsed_str = f"{days}d {hours}h"
+                        else:
+                            elapsed_str = f"{days}d"
+                    
+                    # Format using configured format
+                    date_str = dt.strftime(DATE_FORMAT)
+                    
+                    return f"{date_str} ({elapsed_str})"
+    except Exception as e:
+        logger.debug(f"Failed to parse start date '{start_str}': {e}")
+    
+    # Return original if parsing fails
+    return start_str
+
 def parse_lmstat(raw_text):
     """
     Parse lmstat output into structured data.
@@ -2160,6 +2259,9 @@ def status():
         if _last_error:
             return jsonify({"ok": False, "error": _last_error, "last_update": _last_update})
         
+        # Get current user's locale
+        locale = get_locale()
+        
         filtered = {}
         for name, item in _parsed.items():
             lname = name.lower()
@@ -2171,7 +2273,21 @@ def status():
             if any(h.lower() in lname for h in HIDE_LIST):
                 continue
 
-            filtered[name] = item
+            # Deep copy to avoid modifying the original
+            filtered_item = {
+                "total": item["total"],
+                "used": item["used"],
+                "users": []
+            }
+            
+            # Format start dates for each user according to locale
+            for user in item.get("users", []):
+                user_copy = user.copy()
+                if "start" in user_copy:
+                    user_copy["start"] = parse_start_date(user_copy["start"], locale)
+                filtered_item["users"].append(user_copy)
+            
+            filtered[name] = filtered_item
         
         # Get EID information from cache (only if CLM is available)
         eid_data = get_eid_info() if _clm_available else {}
