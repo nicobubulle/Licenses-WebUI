@@ -124,6 +124,7 @@ def ensure_config_defaults(cfg_obj: configparser.ConfigParser, defaults: dict, p
     - Preserves existing values
     - Adds any missing sections/keys with default values
     - Writes atomically and creates a .bak backup of the previous file
+    - Uses sample config structure with comments
     """
     added = []
     changed = False
@@ -143,11 +144,9 @@ def ensure_config_defaults(cfg_obj: configparser.ConfigParser, defaults: dict, p
         logger.debug("ensure_config_defaults: no missing keys detected; no rewrite needed")
         return
 
-    # Only write if the file content would actually change
-    import io
-    new_buf = io.StringIO()
-    cfg_obj.write(new_buf)
-    new_content = new_buf.getvalue()
+    # Generate new content using sample structure with existing values
+    new_content = generate_config_content(cfg_obj)
+    
     old_content = None
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
@@ -193,6 +192,112 @@ def _generate_admin_key() -> str:
     seed = f"{uuid.uuid4()}-{time.time()}-{os.getpid()}-{os.urandom(16).hex()}".encode("utf-8")
     return hashlib.md5(seed).hexdigest()
 
+def generate_config_content(cfg_obj: configparser.ConfigParser) -> str:
+    """Generate config file content with sample structure but using existing values."""
+    
+    # Helper to safely get value
+    def get_val(section, key, default=""):
+        try:
+            return cfg_obj.get(section, key, fallback=default)
+        except Exception:
+            return default
+    
+    content = """; Licenses WebUI configuration
+[SETTINGS]
+# Path to lmutil.exe (example)
+lmutil_path = {lmutil_path}
+
+# License manager port
+port = {port}
+
+# Web UI port
+web_port = {web_port}
+
+# Auto-refresh interval in minutes
+refresh_minutes = {refresh_minutes}
+
+# Default UI language (en, fr, de, es)
+default_locale = {default_locale}
+
+# Comma-separated substrings of features to hide
+hide_list = {hide_list}
+
+# Enable the Restart service button (yes/no)
+enable_restart = {enable_restart}
+
+# Show EID info button to non-admin users (yes/no)
+show_eid_info = {show_eid_info}
+
+# Admin key (auto-generated, keep secret)
+admin_key = {admin_key}
+
+[DATE_FORMAT]
+# Date and time format (Python strftime format)
+# Examples by language:
+#   US:  %m/%d/%Y %I:%M %p  -> 12/05/2025 02:26 PM
+#   EU:  %d/%m/%Y %H:%M      -> 05/12/2025 14:26
+format = {date_format}
+
+[SERVICE]
+# Windows service name to restart
+service_name = {service_name}
+
+[TEAMS]
+# Enable sending notifications to Microsoft Teams (yes/no)
+enabled = {teams_enabled}
+
+# Incoming webhook URL for Microsoft Teams (set this to your connector URL)
+webhook = {teams_webhook}
+
+# Enable the "update available" notification (yes/no)
+notify_update = {notify_update}
+
+# Enable duplicate user checker notification (yes/no)
+notify_duplicate_checker = {notify_duplicate_checker}
+
+# Enable extratime notification (yes/no)
+notify_extratime = {notify_extratime}
+
+# Extratime duration threshold in hours (default 72h)
+extratime_duration = {extratime_duration}
+
+# Comma-separated list of features to exclude from extratime notifications
+extratime_exclusion = {extratime_exclusion}
+
+# Enable sold-out notification (yes/no)
+notify_soldout = {notify_soldout}
+
+# Comma-separated list of features to exclude from sold-out notifications
+soldout_exclusion = {soldout_exclusion}
+
+# Enable daemon status notifications (yes/no)
+notify_daemon = {notify_daemon}
+""".format(
+        lmutil_path=get_val("SETTINGS", "lmutil_path", DEFAULT_CONFIG["SETTINGS"]["lmutil_path"]),
+        port=get_val("SETTINGS", "port", DEFAULT_CONFIG["SETTINGS"]["port"]),
+        web_port=get_val("SETTINGS", "web_port", DEFAULT_CONFIG["SETTINGS"]["web_port"]),
+        refresh_minutes=get_val("SETTINGS", "refresh_minutes", DEFAULT_CONFIG["SETTINGS"]["refresh_minutes"]),
+        default_locale=get_val("SETTINGS", "default_locale", DEFAULT_CONFIG["SETTINGS"]["default_locale"]),
+        hide_list=get_val("SETTINGS", "hide_list", DEFAULT_CONFIG["SETTINGS"]["hide_list"]),
+        enable_restart=get_val("SETTINGS", "enable_restart", DEFAULT_CONFIG["SETTINGS"]["enable_restart"]),
+        show_eid_info=get_val("SETTINGS", "show_eid_info", DEFAULT_CONFIG["SETTINGS"]["show_eid_info"]),
+        admin_key=get_val("SETTINGS", "admin_key", ""),
+        date_format=get_val("DATE_FORMAT", "format", DEFAULT_CONFIG["DATE_FORMAT"]["format"]),
+        service_name=get_val("SERVICE", "service_name", DEFAULT_CONFIG["SERVICE"]["service_name"]),
+        teams_enabled=get_val("TEAMS", "enabled", DEFAULT_CONFIG["TEAMS"]["enabled"]),
+        teams_webhook=get_val("TEAMS", "webhook", DEFAULT_CONFIG["TEAMS"]["webhook"]),
+        notify_update=get_val("TEAMS", "notify_update", DEFAULT_CONFIG["TEAMS"]["notify_update"]),
+        notify_duplicate_checker=get_val("TEAMS", "notify_duplicate_checker", DEFAULT_CONFIG["TEAMS"]["notify_duplicate_checker"]),
+        notify_extratime=get_val("TEAMS", "notify_extratime", DEFAULT_CONFIG["TEAMS"]["notify_extratime"]),
+        extratime_duration=get_val("TEAMS", "extratime_duration", DEFAULT_CONFIG["TEAMS"]["extratime_duration"]),
+        extratime_exclusion=get_val("TEAMS", "extratime_exclusion", DEFAULT_CONFIG["TEAMS"]["extratime_exclusion"]),
+        notify_soldout=get_val("TEAMS", "notify_soldout", DEFAULT_CONFIG["TEAMS"]["notify_soldout"]),
+        soldout_exclusion=get_val("TEAMS", "soldout_exclusion", DEFAULT_CONFIG["TEAMS"]["soldout_exclusion"]),
+        notify_daemon=get_val("TEAMS", "notify_daemon", DEFAULT_CONFIG["TEAMS"]["notify_daemon"]),
+    )
+    
+    return content
+
 def ensure_admin_key(cfg_obj: configparser.ConfigParser, path: str) -> str:
     """Ensure SETTINGS.admin_key exists; create and persist if missing. Returns the key."""
     if not cfg_obj.has_section("SETTINGS"):
@@ -204,7 +309,8 @@ def ensure_admin_key(cfg_obj: configparser.ConfigParser, path: str) -> str:
     key = _generate_admin_key()
     cfg_obj.set("SETTINGS", "admin_key", key)
 
-    # Write atomically with backup
+    # Write using sample structure with backup
+    new_content = generate_config_content(cfg_obj)
     tmp_path = path + ".tmp"
     bak_path = path + ".bak"
     try:
@@ -218,7 +324,7 @@ def ensure_admin_key(cfg_obj: configparser.ConfigParser, path: str) -> str:
             except Exception as e:
                 logger.warning(f"Could not create backup config: {e}")
         with open(tmp_path, "w", encoding="utf-8") as f:
-            cfg_obj.write(f)
+            f.write(new_content)
         os.replace(tmp_path, path)
         logger.info("Generated and saved new admin_key to config.ini")
     except Exception as e:
