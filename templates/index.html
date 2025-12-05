@@ -579,9 +579,13 @@ async function fetchStatus(){
     // Group licenses
     const grouped = {};
     FEATURE_GROUPS.groups.forEach(g => {
-      grouped[g.id] = { group: g, features: [], eids: new Set() };
+      const grp = { ...g };
+      if (grp.check_maint === undefined) grp.check_maint = true;
+      grouped[g.id] = { group: grp, features: [], eids: new Set() };
     });
-    grouped['other'] = { group: FEATURE_GROUPS.other || {title: 'Other', icon: 'static/icons/other.png'}, features: [], eids: new Set() };
+    const otherGroup = FEATURE_GROUPS.other || {title: 'Other', icon: 'static/icons/other.png'};
+    if (otherGroup.check_maint === undefined) otherGroup.check_maint = true;
+    grouped['other'] = { group: otherGroup, features: [], eids: new Set() };
 
     Object.keys(licenses).sort().forEach(name => {
       const groupId = getGroupForFeature(name);
@@ -634,6 +638,8 @@ async function fetchStatus(){
           const usage = `${used}/${total}`;
           const expiry = item.expiry || "";
           
+          const maintCheckEnabled = grp && grp.check_maint !== false;
+
           // Build versions HTML
           let versionsHtml = '';
           const featureVersions = data.license_versions && data.license_versions[name];
@@ -653,27 +659,33 @@ async function fetchStatus(){
           
           let usersHtml = "";
           if (item.users && item.users.length>0) {
-            // Group users by feature_version
+            // Group users by effective feature_version (use maintenance_version if ok_different)
             const usersByVersion = {};
             for (const u of item.users) {
-              const fv = u.feature_version || 'unknown';
-              if (!usersByVersion[fv]) {
-                usersByVersion[fv] = [];
+              // Determine effective version: maintenance if ok_different, otherwise feature_version
+              let effectiveVersion = u.feature_version || 'unknown';
+              if (u.maintenance_status === 'ok_different' && u.maintenance_version) {
+                effectiveVersion = u.maintenance_version;
               }
-              usersByVersion[fv].push(u);
+              
+              if (!usersByVersion[effectiveVersion]) {
+                usersByVersion[effectiveVersion] = [];
+              }
+              usersByVersion[effectiveVersion].push(u);
             }
             
-            // Sort versions (descending order, unknown last)
+            // Sort versions (ascending order, unknown last)
             const sortedVersions = Object.keys(usersByVersion).sort((a, b) => {
               if (a === 'unknown') return 1;
               if (b === 'unknown') return -1;
-              return b.localeCompare(a);
+              return a.localeCompare(b);
             });
             
             // Build HTML grouped by version
             for (const fv of sortedVersions) {
               const users = usersByVersion[fv];
               const groupReleases = grp.releases || [];
+              
               const colorInfo = getVersionColorInfo(fv, groupReleases);
               const versionClassAttr = colorInfo.class ? ` class="${colorInfo.class}"` : '';
               const versionTitleAttr = colorInfo.tooltip ? ` title="${colorInfo.tooltip}"` : '';
@@ -697,6 +709,11 @@ async function fetchStatus(){
                   maintIcon = '⚠️';
                   maintClass = 'maint-duplicate';
                   maintTooltip = t('duplicate_warning') || 'Duplicate checkout detected';
+                } else if (!maintCheckEnabled) {
+                  // Maintenance consistency disabled for this group: always show neutral black icon
+                  maintIcon = '⚫';
+                  maintClass = 'maint-none';
+                  maintTooltip = t('maint_none');
                 } else if (u.maintenance_status === 'none') {
                   maintIcon = '⚫';
                   maintClass = 'maint-none';
@@ -708,8 +725,7 @@ async function fetchStatus(){
                 } else if (u.maintenance_status === 'ok_different') {
                   maintIcon = '🟢';
                   maintClass = 'maint-ok';
-                  const maintVer = u.maintenance_version || 'unknown';
-                  maintTooltip = t('maint_ok_different').replace('{version}', maintVer);
+                  maintTooltip = t('maint_ok');
                 } else if (u.maintenance_status === 'no_maintenance') {
                   maintIcon = '🟠';
                   maintClass = 'maint-no-maintenance';
@@ -722,13 +738,7 @@ async function fetchStatus(){
                 
                 // Build version info with app version only (feature version already shown in header)
                 const appVersion = u.app_version || u.version || null;
-                
-                let versionInfo = '';
-                if (appVersion) {
-                  versionInfo = `💻 v${appVersion}`;
-                } else {
-                  versionInfo = t('version_unknown');
-                }
+                const versionInfo = appVersion ? `💻 v${appVersion}` : t('version_unknown');
                 
                 const maintIconHtml = maintIcon ? `<span class="maint-icon ${maintClass}" title="${maintTooltip}">${maintIcon}</span>` : '';
                 

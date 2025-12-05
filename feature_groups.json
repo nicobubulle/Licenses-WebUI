@@ -4,6 +4,7 @@
       "id": "cr360",
       "title": "Cyclone REGISTER 360 Plus",
       "icon": "static/icons/cr360.png",
+      "check_maint": true,
       "features": [
         "TLS_CYCL.Register360",
         "TLS_CYCL.Register"
@@ -37,6 +38,7 @@
       "id": "cr360blk",
       "title": "Cyclone REGISTER 360 Plus BLK Edition",
       "icon": "static/icons/cr360blk.png",
+      "check_maint": true,
       "features": [
         "TLS_CYCL.Register360BLK"
       ],
@@ -69,6 +71,7 @@
       "id": "workflow",
       "title": "Cyclone WORKFLOW",
       "icon": "static/icons/workflow.png",
+      "check_maint": true,
       "features": [
         "TLS_CYCL.PublisherPro"
       ],
@@ -101,6 +104,7 @@
       "id": "pegasuso",
       "title": "Cyclone PEGASUS Office",
       "icon": "static/icons/pegasuso.png",
+      "check_maint": true,
       "features": [
         "RC_CyclonePEGASUS"
       ]
@@ -109,6 +113,7 @@
       "id": "c3dr",
       "title": "Cyclone 3DR",
       "icon": "static/icons/c3dr.png",
+      "check_maint": false,
       "features": [
         "TLS_CYCL.3DR*"
       ],
@@ -184,6 +189,7 @@
       "id": "pinpoint",
       "title": "Pinpoint",
       "icon": "static/icons/pinpoint.png",
+      "check_maint": false,
       "features": [
         "PinPoint*"
       ]
@@ -192,6 +198,7 @@
       "id": "infinity",
       "title": "Infinity",
       "icon": "static/icons/infinity.png",
+      "check_maint": false,
       "features": [
         "Infinity*"
       ],
@@ -242,6 +249,7 @@
       "id": "cwrx",
       "title": "Cloudworx",
       "icon": "static/icons/cwrx.png",
+      "check_maint": true,
       "features": [
         "*CLWRX*"
       ],

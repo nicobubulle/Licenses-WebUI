@@ -110,6 +110,7 @@ DEFAULT_CONFIG = {
         "webhook": "",
         "notify_update": "no",
         "notify_duplicate_checker": "no",
+        "notify_inconsistent": "no",
         "notify_extratime": "no",
         "extratime_duration": "72",
         "extratime_exclusion": "",
@@ -259,6 +260,9 @@ notify_update = {notify_update}
 # Enable duplicate user checker notification (yes/no)
 notify_duplicate_checker = {notify_duplicate_checker}
 
+# Enable inconsistent license notification (yes/no)
+notify_inconsistent = {notify_inconsistent}
+
 # Enable extratime notification (yes/no)
 notify_extratime = {notify_extratime}
 
@@ -293,6 +297,7 @@ notify_daemon = {notify_daemon}
         teams_webhook=get_val("TEAMS", "webhook", DEFAULT_CONFIG["TEAMS"]["webhook"]),
         notify_update=get_val("TEAMS", "notify_update", DEFAULT_CONFIG["TEAMS"]["notify_update"]),
         notify_duplicate_checker=get_val("TEAMS", "notify_duplicate_checker", DEFAULT_CONFIG["TEAMS"]["notify_duplicate_checker"]),
+        notify_inconsistent=get_val("TEAMS", "notify_inconsistent", DEFAULT_CONFIG["TEAMS"]["notify_inconsistent"]),
         notify_extratime=get_val("TEAMS", "notify_extratime", DEFAULT_CONFIG["TEAMS"]["notify_extratime"]),
         extratime_duration=get_val("TEAMS", "extratime_duration", DEFAULT_CONFIG["TEAMS"]["extratime_duration"]),
         extratime_exclusion=get_val("TEAMS", "extratime_exclusion", DEFAULT_CONFIG["TEAMS"]["extratime_exclusion"]),
@@ -413,6 +418,9 @@ notify_update = no
 
 # Enable duplicate user checker notification (yes/no)
 notify_duplicate_checker = no
+
+# Enable inconsistent license notification (yes/no)
+notify_inconsistent = no
 
 # Enable extratime notification (yes/no)
 notify_extratime = no
@@ -557,6 +565,11 @@ except Exception:
     TEAMS_NOTIFY_DUPLICATE_CHECKER = False
 
 try:
+    TEAMS_NOTIFY_INCONSISTENT = cfg.getboolean("TEAMS", "notify_inconsistent", fallback=False)
+except Exception:
+    TEAMS_NOTIFY_INCONSISTENT = False
+
+try:
     TEAMS_NOTIFY_EXTRATIME = cfg.getboolean("TEAMS", "notify_extratime", fallback=False)
 except Exception:
     TEAMS_NOTIFY_EXTRATIME = False
@@ -692,6 +705,35 @@ logger.debug(f"Loaded date format: {DATE_FORMAT}")
 
 # Feature groups configuration
 FEATURE_GROUPS = {}
+FEATURE_GROUPS_LOOKUP = {"exact": {}, "wildcard": []}
+
+
+def _build_feature_group_lookup():
+    """Build lookup tables for feature groups (exact and wildcard), defaulting check_maint to True."""
+    global FEATURE_GROUPS_LOOKUP
+    FEATURE_GROUPS_LOOKUP = {"exact": {}, "wildcard": []}
+    for g in FEATURE_GROUPS.get("groups", []):
+        if "check_maint" not in g:
+            g["check_maint"] = True
+        for f in g.get("features", []):
+            fl = str(f).lower()
+            if "*" in fl:
+                pattern_re = re.compile('^' + re.escape(fl).replace('\\*', '.*') + '$')
+                FEATURE_GROUPS_LOOKUP["wildcard"].append((pattern_re, g))
+            else:
+                FEATURE_GROUPS_LOOKUP["exact"][fl] = g
+
+
+def resolve_feature_group(feature_name: str):
+    """Return the group dict matching feature_name, or None if not found."""
+    lname = str(feature_name).lower()
+    grp = FEATURE_GROUPS_LOOKUP["exact"].get(lname)
+    if grp:
+        return grp
+    for pat, g in FEATURE_GROUPS_LOOKUP.get("wildcard", []):
+        if pat.match(lname):
+            return g
+    return None
 
 def load_feature_groups():
     """Load feature groups from feature_groups.json.
@@ -710,6 +752,8 @@ def load_feature_groups():
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in feature groups file: {e}")
         FEATURE_GROUPS = {"groups": [], "other": {"title": "Other", "icon": "static/icons/other.png"}}
+
+    _build_feature_group_lookup()
 
 # ---------- Statistics Database ----------
 # Database stored next to executable, not in package
@@ -2341,6 +2385,81 @@ def check_duplicates(parsed_data):
             except Exception as e:
                 logger.warning(f"Failed to send duplicate notification: {e}", exc_info=True)
 
+# Inconsistent license state tracking
+_notified_inconsistent = set()
+
+def check_inconsistent(parsed_data):
+    """Check for users with inconsistent license status (only standard or only maintenance) and send Teams notifications."""
+    global _notified_inconsistent
+    
+    if not TEAMS_ENABLED or not TEAMS_NOTIFY_INCONSISTENT:
+        return
+    
+    new_inconsistent = []
+    
+    for feature_name, feature_data in parsed_data.items():
+        lname = feature_name.lower()
+        # Skip maintenance features (always hidden)
+        if 'maint' in lname:
+            continue
+
+        # Skip groups where maintenance consistency is disabled
+        grp = resolve_feature_group(feature_name)
+        if grp is not None and not grp.get("check_maint", True):
+            continue
+        
+        users = feature_data.get("users", [])
+        for u in users:
+            # Check for inconsistent status
+            status = u.get("maintenance_status")
+            if status in ("no_maintenance", "no_standard"):
+                inconsistent_key = (feature_name, u["user"], u["computer"], status)
+                if inconsistent_key not in _notified_inconsistent:
+                    new_inconsistent.append({
+                        "feature": feature_name,
+                        "user": u["user"],
+                        "computer": u["computer"],
+                        "status": status,
+                        "feature_version": u.get("feature_version", "unknown"),
+                        "app_version": u.get("app_version", "unknown")
+                    })
+                    _notified_inconsistent.add(inconsistent_key)
+                    logger.info(f"Inconsistent license detected: {u['user']}@{u['computer']} on {feature_name} - {status}")
+    
+    # Send Teams notification for new inconsistent licenses
+    if new_inconsistent:
+        for inc in new_inconsistent:
+            locale = DEFAULT_LOCALE
+            title = TRANSLATIONS.get(locale, {}).get("inconsistent_title", "Inconsistent License Detected")
+            
+            if inc['status'] == 'no_maintenance':
+                message_tpl = TRANSLATIONS.get(locale, {}).get(
+                    "inconsistent_no_maintenance",
+                    "**Feature:** {feature}\n**User:** {user}\n**Computer:** {computer}\n**Status:** Missing maintenance license\n**Feature version:** {feature_version}\n**App version:** {app_version}"
+                )
+            else:  # no_standard
+                message_tpl = TRANSLATIONS.get(locale, {}).get(
+                    "inconsistent_no_standard",
+                    "**Feature:** {feature}\n**User:** {user}\n**Computer:** {computer}\n**Status:** Missing standard license (only maintenance)\n**Feature version:** {feature_version}\n**App version:** {app_version}"
+                )
+            
+            try:
+                message = message_tpl.format(
+                    feature=inc['feature'],
+                    user=inc['user'],
+                    computer=inc['computer'],
+                    feature_version=inc['feature_version'],
+                    app_version=inc['app_version']
+                )
+            except Exception:
+                message = f"**Feature:** {inc['feature']}\n**User:** {inc['user']}\n**Computer:** {inc['computer']}\n**Status:** {inc['status']}"
+            
+            try:
+                send_teams_notification(title, message)
+                logger.info(f"Teams notification sent for inconsistent license: {inc['user']}@{inc['computer']} - {inc['feature']} - {inc['status']}")
+            except Exception as e:
+                logger.warning(f"Failed to send inconsistent notification: {e}", exc_info=True)
+
 def refresh_loop():
     """Background thread that periodically refreshes license data."""
     global _raw_output, _parsed, _last_update, _last_error
@@ -2374,6 +2493,11 @@ def refresh_loop():
                 check_duplicates(parsed)
             except Exception as e:
                 logger.warning(f"Duplicate checker failed: {e}", exc_info=True)
+            # Run inconsistent license checker
+            try:
+                check_inconsistent(parsed)
+            except Exception as e:
+                logger.warning(f"Inconsistent checker failed: {e}", exc_info=True)
             # Run extratime checker
             try:
                 check_extratime(parsed)
@@ -2533,6 +2657,10 @@ def manual_refresh():
             check_duplicates(parsed)
         except Exception as e:
             logger.warning(f"Duplicate checker failed (manual): {e}", exc_info=True)
+        try:
+            check_inconsistent(parsed)
+        except Exception as e:
+            logger.warning(f"Inconsistent checker failed (manual): {e}", exc_info=True)
         try:
             check_extratime(parsed)
         except Exception as e:
