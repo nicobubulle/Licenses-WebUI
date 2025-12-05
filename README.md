@@ -12,6 +12,8 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - Periodic background refresh of lmstat output
 - Manual refresh (runs same parsing + notification checkers as background loop)
 - **Version Display**: Shows both feature version (🔑) and application version (💻) for each user checkout
+  - Feature versions are grouped and sorted in ascending order
+  - When maintenance and standard versions differ, the maintenance version is displayed in the feature version header
 - **License Versions Column**: Displays per-feature version quantities from `lmstat -a --no-user-info` with 24h cache and unified refresh via the EID button
 - **Statistics Dashboard**: Track and visualize license usage over time with interactive graphs (SQLite storage)
 - **EID Information**: View detailed EID (Enterprise ID) mappings with feature grouping and license totals (admin-only)
@@ -20,6 +22,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - Windows service restart with robust state checking (requires OS admin + enabled in config)
 - System tray integration (pystray + Pillow)
 - **Feature Grouping**: Organize licenses into collapsible categories with custom icons via `feature_groups.json` (supports exact names and wildcard patterns)
+  - **Per-group Maintenance Checking**: Each group can disable maintenance consistency checks via `"check_maint": false` flag
 - **Auto-Configuration**: Missing config keys are automatically added with default values on startup
 - Internationalization (i18n JSON files: en, fr, de, es) with query/cookie/header locale negotiation
 - Automatic GitHub release check (daily) + optional Teams update notification
@@ -29,6 +32,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
   - Extended usage ("extratime" beyond configurable hours threshold, grouped per user)
   - Sold-out feature transitions (becomes fully used / becomes available again)
   - Daemon status (license server down/up detection with service and port verification)
+  - **Inconsistent licenses** (user has only standard or only maintenance feature) — respects per-group `check_maint` setting
 - Maintenance filtering: optionally hide and suppress notifications for features containing `maint`
 - Additional hide filtering via substring list
 - Configurable via `config.ini` with atomic file updates and backup creation
@@ -62,8 +66,14 @@ schtasks /create /tn "Licenses WebUI" /tr "C:\path\to\Licenses_WebUI.exe" /sc on
 - `show_eid_info`: `yes|no` show EID info button to non-admin users (default `no`).
 - `hide_list`: Comma-separated substrings; any feature containing one is hidden.
 - `enable_restart`: Enable Windows service restart button (requires OS admin elevation on startup).
+- `admin_restriction_restart`: `yes|no` restrict restart button to app admin users only (default `yes`).
 
 **Note:** Maintenance features (containing 'maint') are always hidden from display. Users who only have maintenance checkouts (no standard feature) will appear in the standard feature list with a 🔴 indicator.
+
+### DATE_FORMAT section
+- `format`: Date/time format string for displaying checkout start dates (default `%d/%m/%Y %H:%M`).
+  - Examples provided as comments: `%m/%d/%Y %I:%M %p` (US), `%d.%m.%Y %H:%M` (DE), `%Y-%m-%d %H:%M` (ISO)
+  - Elapsed time is automatically appended (e.g., "3h 25m" or "2d 5h")
 
 ### SERVICE section
 - `service_name`: Display + target for restart functionality.
@@ -80,8 +90,10 @@ See `TEAMS_SETUP.md` for full details.
 - `notify_soldout`: Sold-out transition alerts.
 - `soldout_exclusion`: Comma-separated features to skip for sold-out.
 - `notify_daemon`: Daemon status notifications (license server down/up with verification).
+- `notify_inconsistent`: Inconsistent license alerts (user has only standard or only maintenance feature).
+  - Only checks features in groups where `check_maint` is not `false`
 
-Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, extratime, and sold-out checkers immediately.
+Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, inconsistent, extratime, and sold-out checkers immediately.
 
 ## Endpoints
 - `/` — main UI
@@ -119,10 +131,13 @@ Both versions are extracted from lmstat output and displayed inline with user in
 
 **Maintenance Status Indicators:**
 Users are marked with colored icons indicating their maintenance status:
-- **⚫ Gray**: Multiple standard features without maintenance
-- **🟢 Green**: Has both standard and maintenance features (same version or different versions shown in tooltip)
+- **⚫ Gray/Black**: No maintenance feature or maintenance checking disabled for this group
+- **🟢 Green**: Has both standard and maintenance features
 - **🟠 Orange**: Only has standard feature (no maintenance)
 - **🔴 Red**: Only has maintenance feature (automatically moved to standard feature list)
+- **⚠️ Warning**: Duplicate checkout detected (same user@computer multiple times)
+
+When a feature group has `"check_maint": false` in `feature_groups.json`, all users in that group show the neutral black icon (⚫) regardless of maintenance status, and no inconsistent license notifications are sent.
 
 Hover over any maintenance icon to see detailed status information in your preferred language.
 
@@ -157,6 +172,28 @@ Configure `show_eid_info = yes` in `config.ini` to make the EID button visible t
 ## Feature Grouping
 Licenses are automatically organized into collapsible categories with custom icons for easier navigation. Groups are collapsed by default and can be toggled by clicking the header.
 
+**Configuration via `feature_groups.json`:**
+- Each group supports exact feature names and wildcard patterns (e.g., `"TLS_CYCL.3DR*"`)
+- `check_maint` property (default `true`): controls maintenance consistency checking
+  - Set to `false` to disable maintenance status verification for a specific product group
+  - When disabled, users show neutral black icon (⚫) and no inconsistent license Teams notifications are sent
+- `releases` array: optional release date mapping for version colorization
+- `icon` property: custom icon path for visual identification
+
+Example group configuration:
+```json
+{
+  "id": "c3dr",
+  "title": "Cyclone 3DR",
+  "icon": "static/icons/c3dr.png",
+  "check_maint": false,
+  "features": ["TLS_CYCL.3DR*"],
+  "releases": [
+    { "app_version": "2025.0.0", "date": "2024-07-06" }
+  ]
+}
+```
+
 ## Internationalization
 Translation files live in `i18n/` as JSON. Supported locales are loaded from `app.py` (DEFAULT_LOCALE and SUPPORTED_LOCALES). To add a language:
 1. Create `i18n/xx.json` (xx = locale code).
@@ -180,6 +217,7 @@ enabled = yes
 webhook = https://outlook.office.com/webhook/....
 notify_update = yes
 notify_duplicate_checker = yes
+notify_inconsistent = yes
 notify_extratime = yes
 extratime_duration = 72
 extratime_exclusion = maint-test,temp-feature
@@ -212,6 +250,7 @@ For full setup instructions see `TEAMS_SETUP.md`. Adaptive Card payload is sent;
 Notification de-duplication rules:
 - Update: once per discovered version.
 - Duplicate: once per (feature,user,computer) combination.
+- Inconsistent: once per (feature,user,computer,status) combination — only for groups with `check_maint` enabled.
 - Extratime: once per (user,computer) after threshold; aggregates all exceeding features.
 - Sold-out: on state transitions (sold out -> available / available -> sold out).
 - Daemon: on state transitions (up -> down / down -> up), verified via service state and port connectivity.
