@@ -508,6 +508,17 @@ try:
 except Exception:
     SHOW_EID_INFO = False
 
+# Check for test mode (presence of test directory with marker file)
+TEST_MODE = False
+TEST_DIR = os.path.join(_BASE_DIR, "test")
+TEST_MARKER = os.path.join(TEST_DIR, ".testmode")
+if os.path.exists(TEST_MARKER):
+    TEST_MODE = True
+    logger.warning("=" * 80)
+    logger.warning("TEST MODE ENABLED - Using test files instead of real commands")
+    logger.warning(f"Test directory: {TEST_DIR}")
+    logger.warning("=" * 80)
+
 # Safely read SERVICE section
 try:
     if cfg.has_section("SERVICE"):
@@ -1379,6 +1390,19 @@ def try_clm_query_features():
     
     Returns: Raw output text or None if command fails
     """
+    # Test mode: read from file
+    if TEST_MODE:
+        test_file = os.path.join(TEST_DIR, "clm_query_features.txt")
+        try:
+            with open(test_file, "r", encoding="utf-8") as f:
+                out = f.read()
+            logger.debug(f"TEST MODE: Read CLM query-features from {test_file}")
+            return out
+        except Exception as e:
+            logger.debug(f"TEST MODE: Failed to read {test_file}: {e}")
+            return None
+    
+    # Normal mode: execute command
     clm_path = os.path.join(os.path.dirname(LMUTIL_PATH), "CLMCommandLine.exe")
     
     if not os.path.exists(clm_path):
@@ -1448,6 +1472,19 @@ def try_lmstat_no_user():
     
     Returns: Raw lmstat output text or None if command fails
     """
+    # Test mode: read from file
+    if TEST_MODE:
+        test_file = os.path.join(TEST_DIR, "lmstat_no_user.txt")
+        try:
+            with open(test_file, "r", encoding="utf-8") as f:
+                out = f.read()
+            logger.debug(f"TEST MODE: Read lmstat --no-user-info from {test_file}")
+            return out
+        except Exception as e:
+            logger.debug(f"TEST MODE: Failed to read {test_file}: {e}")
+            return None
+    
+    # Normal mode: execute command
     exe_dir = os.path.dirname(LMUTIL_PATH) or None
     cmd = [LMUTIL_PATH, "lmstat", "-a", "--no-user-info", "-c", f"{LM_PORT}@localhost"]
     
@@ -1556,6 +1593,19 @@ def try_lmstat_commands():
     Returns: Raw lmstat output text
     Raises: RuntimeError if all attempts fail
     """
+    # Test mode: read from file
+    if TEST_MODE:
+        test_file = os.path.join(TEST_DIR, "lmstat_output.txt")
+        try:
+            with open(test_file, "r", encoding="utf-8") as f:
+                out = f.read()
+            logger.debug(f"TEST MODE: Read lmstat output from {test_file}")
+            return f"(TEST MODE: {test_file})\n\n" + out
+        except Exception as e:
+            logger.debug(f"TEST MODE: Failed to read {test_file}: {e}")
+            raise RuntimeError(f"TEST MODE: Failed to read {test_file}: {e}")
+    
+    # Normal mode: execute command
     exe_dir = os.path.dirname(LMUTIL_PATH) or None
     commands = [
         [LMUTIL_PATH, "lmstat", "-a", "-c", f"{LM_PORT}@localhost"],
