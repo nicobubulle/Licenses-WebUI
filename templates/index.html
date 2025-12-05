@@ -276,10 +276,12 @@
       </button>
 
       {% if show_restart %}
+        {% if not admin_restriction_restart or admin_mode %}
       <button id="btn-restart" class="btn btn-danger" title="{{ _('restart_title') }}" aria-label="{{ _('restart_title') }}">
       <img src="{{ url_for('static', filename='restart.svg') }}" alt="" width="16" height="16" aria-hidden="true" focusable="false">
       <span>{{ _('restart_label') }}</span>
       </button>
+        {% endif %}
       {% endif %}
 
       {% if admin_mode %}

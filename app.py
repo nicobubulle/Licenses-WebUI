@@ -96,6 +96,7 @@ DEFAULT_CONFIG = {
         "default_locale": "en",
         "hide_list": "",
         "enable_restart": "no",
+        "admin_restriction_restart": "yes",
         "show_eid_info": "no",
     },
     "DATE_FORMAT": {
@@ -225,6 +226,9 @@ hide_list = {hide_list}
 # Enable the Restart service button (yes/no)
 enable_restart = {enable_restart}
 
+# Restrict restart button to admin only (yes/no)
+admin_restriction_restart = {admin_restriction_restart}
+
 # Show EID info button to non-admin users (yes/no)
 show_eid_info = {show_eid_info}
 
@@ -280,6 +284,7 @@ notify_daemon = {notify_daemon}
         default_locale=get_val("SETTINGS", "default_locale", DEFAULT_CONFIG["SETTINGS"]["default_locale"]),
         hide_list=get_val("SETTINGS", "hide_list", DEFAULT_CONFIG["SETTINGS"]["hide_list"]),
         enable_restart=get_val("SETTINGS", "enable_restart", DEFAULT_CONFIG["SETTINGS"]["enable_restart"]),
+        admin_restriction_restart=get_val("SETTINGS", "admin_restriction_restart", DEFAULT_CONFIG["SETTINGS"]["admin_restriction_restart"]),
         show_eid_info=get_val("SETTINGS", "show_eid_info", DEFAULT_CONFIG["SETTINGS"]["show_eid_info"]),
         admin_key=get_val("SETTINGS", "admin_key", ""),
         date_format=get_val("DATE_FORMAT", "format", DEFAULT_CONFIG["DATE_FORMAT"]["format"]),
@@ -381,6 +386,9 @@ hide_list =
 
 # Enable the Restart service button (yes/no)
 enable_restart = no
+
+# Restrict restart button to admin only (yes/no)
+admin_restriction_restart = yes
 
 [DATE_FORMAT]
 # Date and time format (Python strftime format)
@@ -487,6 +495,12 @@ try:
     logger.info(f"Service restart enabled: {ENABLE_RESTART}")
 except Exception:
     ENABLE_RESTART = True
+
+# Restrict restart to admin only
+try:
+    ADMIN_RESTRICTION_RESTART = cfg.getboolean("SETTINGS", "admin_restriction_restart", fallback=True)
+except Exception:
+    ADMIN_RESTRICTION_RESTART = True
 
 # Show EID info config (default False)
 try:
@@ -969,7 +983,8 @@ def inject_i18n():
         latest_version=LATEST_VERSION,
         update_available=UPDATE_AVAILABLE,
         latest_url=LATEST_URL,
-        feature_groups_json=feature_groups_json
+        feature_groups_json=feature_groups_json,
+        admin_restriction_restart=ADMIN_RESTRICTION_RESTART
     )
 
 # ---------- System Tray ----------
