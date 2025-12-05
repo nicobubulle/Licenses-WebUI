@@ -1465,16 +1465,11 @@ def parse_lmstat(raw_text):
     re_feature_version = re.compile(r'^\s*"[^"]+"\s+v?([0-9A-Za-z\.\-]+)', re.IGNORECASE)
     # Also try to extract version from any line with format: FEATURE_NAME vVERSION or (vVERSION)
     re_version_anywhere = re.compile(r'\s+v?([0-9A-Za-z\.\-]+)\s*\(', re.IGNORECASE)
-    # Match user lines where host appears in parentheses after version, e.g.:
-    #   n.khodja 2024-12-01 2024-12-01 (v2023.1101) (WS7NKHODJ/27000 1315), start Sun 12/1 13:39
-    # Format A: username, two tokens (often dates), then (vVERSION) (HOST/PORT PID), start ...
-    re_user_fmtA = re.compile(
-        r'^\s*(?P<user>.+?)\s+\S+\s+\S+\s+\(v?(?P<appver>[0-9A-Za-z\.\-]+)\)\s+\((?P<host>[^/\)\s]+)[^\)]*\),\s*start\s+(?P<start>.+)',
-        re.IGNORECASE
-    )
-    # Format B: username directly before (vVERSION) (HOST ...) when the intermediate tokens are absent
-    re_user_fmtB = re.compile(
-        r'^\s*(?P<user>.+?)\s+\(v?(?P<appver>[0-9A-Za-z\.\-]+)\)\s+\((?P<host>[^/\)\s]+)[^\)]*\),\s*start\s+(?P<start>.+)',
+    # Match user lines where the real host is the first token after username.
+    # Pattern: username HOST [other tokens...] (vVERSION) (...), start DATE
+    # The HOST is the first token immediately after username
+    re_user_general = re.compile(
+        r'^\s*(?P<user>\S+)\s+(?P<host>\S+)\s+.*?\(v?(?P<appver>[0-9A-Za-z\.\-]+)\)\s+\([^\)]*\),\s*start\s+(?P<start>.+)',
         re.IGNORECASE
     )
 
@@ -1511,7 +1506,7 @@ def parse_lmstat(raw_text):
                     current_feature_version = None
             continue
 
-        m4 = re_user_fmtA.search(line) or re_user_fmtB.search(line)
+        m4 = re_user_general.search(line)
         if m4 and current:
             user_data = {
                 "user": m4.group('user').strip(),
