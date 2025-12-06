@@ -42,6 +42,12 @@
   </header>
 
   <div class="card" id="eid-container">
+    <div style="margin-bottom: 16px;">
+      <label for="group-filter" style="display: inline-block; margin-right: 8px; font-weight: 600;">{{ _('filter_by_app', default='Filter by app:') }}</label>
+      <select id="group-filter" style="padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 1em; cursor: pointer;">
+        <option value="">{{ _('all_features', default='All Features') }}</option>
+      </select>
+    </div>
     <div id="eid-list"></div>
   </div>
 
@@ -115,18 +121,31 @@ function positionTooltip(tip, clientX, clientY) {
 
 function renderEids() {
   const container = document.getElementById('eid-list');
+  const selectedGroup = document.getElementById('group-filter').value;
   const eids = Object.keys(EIDS).sort();
+  
   if (eids.length === 0) {
     container.innerHTML = `<div class="empty">${t('no_eid_data')}</div>`;
     return;
   }
+  
   let html = '';
   eids.forEach(eid => {
     const features = EIDS[eid];
+    
+    // Filter features by selected group
+    let filteredFeatures = features;
+    if (selectedGroup) {
+      filteredFeatures = features.filter(f => f.group === selectedGroup);
+    }
+    
+    // Skip EID if it has no features in the selected group
+    if (filteredFeatures.length === 0) return;
+    
     // Separate other-group features
     const otherFeatures = [];
     const nonOtherFeatures = [];
-    features.forEach(f => {
+    filteredFeatures.forEach(f => {
       if (f.group === 'other') otherFeatures.push(f); else nonOtherFeatures.push(f);
     });
     html += `<div class="eid-row"><div class="eid-label">${eid}</div><div class="eid-icons">`;
@@ -247,7 +266,30 @@ function resolveGroup(featureName){
   return 'other';
 }
 
+// Populate group filter dropdown
+function populateGroupFilter() {
+  const select = document.getElementById('group-filter');
+  const groups = FEATURE_GROUPS.groups || [];
+  
+  groups.forEach(g => {
+    const option = document.createElement('option');
+    option.value = g.id;
+    option.textContent = g.title || g.id;
+    select.appendChild(option);
+  });
+  
+  // Add 'Other' group with translation
+  const otherOption = document.createElement('option');
+  otherOption.value = 'other';
+  otherOption.textContent = t('other_features');
+  select.appendChild(otherOption);
+  
+  // Listen to filter changes
+  select.addEventListener('change', renderEids);
+}
+
 renderEids();
+populateGroupFilter();
 btnRefreshEid.addEventListener('click', doRefreshEid);
 </script>
 </body>

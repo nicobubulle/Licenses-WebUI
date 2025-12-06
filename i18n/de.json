@@ -51,6 +51,7 @@
   "feature_label": "Funktion",
   "time_range": "Zeitraum",
   "all_features": "Alle Funktionen",
+  "filter_by_app": "Nach App filtern:",
   "last_hour": "Letzte Stunde",
   "last_6_hours": "Letzte 6 Stunden",
   "last_24_hours": "Letzte 24 Stunden",
