@@ -87,5 +87,13 @@
   "users_count_suffix": "",
   "latest_release": "Neueste Version: v{version} ({date})",
   "last_compatible_release": "Letzte kompatible Version: v{version} ({date})",
-  "users_count": "{n} Benutzer{suffix}"
+  "users_count": "{n} Benutzer{suffix}",
+  "return_licenses": "Lizenzen zurückgeben",
+  "return_license": "Lizenz zurückgeben",
+  "return_eid_label": "EID zum Zurückgeben:",
+  "return_selected": "Auswahl zurückgeben",
+  "select_all": "Alle auswählen",
+  "deactivation_steps": "Deaktivierung",
+  "deactivation_in_progress": "Verarbeitung der Rückgabe",
+  "return_success": "Lizenz erfolgreich zurückgegeben"
 }

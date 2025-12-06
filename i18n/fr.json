@@ -87,5 +87,13 @@
   "users_count_suffix": "s",
   "latest_release": "Dernière version : v{version} ({date})",
   "last_compatible_release": "Dernière version compatible : v{version} ({date})",
-  "users_count": "{n} utilisateur{suffix}"
+  "users_count": "{n} utilisateur{suffix}",
+  "return_licenses": "Retourner les licences",
+  "return_license": "Retourner la licence",
+  "return_eid_label": "EID à retourner :",
+  "return_selected": "Retourner la sélection",
+  "select_all": "Tout sélectionner",
+  "deactivation_steps": "Désactivation",
+  "deactivation_in_progress": "Traitement du retour",
+  "return_success": "Licence retournée avec succès"
 }

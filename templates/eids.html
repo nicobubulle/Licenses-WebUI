@@ -16,10 +16,20 @@
     .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-weight:600; text-decoration:none; color:#111; white-space:nowrap; }
     .btn:disabled { opacity:0.5; cursor:not-allowed; }
     .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
+    .btn-danger { background: linear-gradient(180deg,var(--danger),#c82333); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
     .card { background:var(--card); padding:16px; border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; max-width:100%; }
     .eid-row { background:var(--surface); padding:12px 14px; border:1px solid var(--border); border-radius:6px; margin-bottom:10px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
-    .eid-label { font-weight:700; font-family:monospace; margin-right:8px; }
+    .eid-header { width:100%; display:flex; align-items:center; justify-content:flex-start; gap:6px; flex-wrap:nowrap; }
+    .eid-left-group { display:flex; align-items:center; gap:6px; flex-wrap:nowrap; }
+    .eid-checkbox { margin:0; cursor:pointer; width:20px; height:20px; flex-shrink:0; }
+    .eid-label { font-weight:700; font-family:monospace; margin:0; word-break:break-all; flex-shrink:0; }
+    .eid-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+    .btn-bulk-return { display:none; }
+    .btn-bulk-return.show { display:inline-flex; }
+    .icon-btn { width:32px; height:32px; border:1px solid var(--border); border-radius:50%; background:var(--surface); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
+    .icon-btn:hover { background:#f0f4ff; }
+    .icon-btn img { width:16px; height:16px; filter: invert(39%) sepia(71%) saturate(2660%) hue-rotate(336deg) brightness(96%) contrast(96%); }
     .eid-icons { display:flex; gap:12px; flex-wrap:wrap; }
     .icon-wrap { position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center; }
     .icon-wrap img { max-width:36px; max-height:36px; object-fit:contain; }
@@ -67,6 +77,14 @@
         <img src="{{ url_for('static', filename='plus.svg') }}" alt="" width="16" height="16" style="filter:brightness(0) invert(1);" aria-hidden="true" />
         {{ _('add_licenses', default='Add Licenses') }}
       </button>
+      <button id="btn-bulk-return" class="btn btn-danger btn-bulk-return" style="font-size: 0.9em;">
+        <img src="{{ url_for('static', filename='cross.svg') }}" alt="" width="16" height="16" style="filter:brightness(0) invert(1);" aria-hidden="true" />
+        {{ _('return_selected', default='Return Selected') }}
+      </button>
+    </div>
+    <div style="margin-bottom: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; gap: 8px;">
+      <input type="checkbox" id="select-all-checkbox" style="margin: 0; cursor: pointer; width: 20px; height: 20px;" />
+      <label for="select-all-checkbox" style="margin: 0; cursor: pointer; font-weight: 600; user-select: none;">{{ _('select_all', default='Select All') }}</label>
     </div>
     <div id="eid-list"></div>
   </div>
@@ -93,6 +111,26 @@
     </div>
   </div>
 
+  <!-- Return Licenses Modal -->
+  <div id="return-license-modal" class="modal" onclick="if(event.target===this) closeReturnModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 id="return-modal-title">{{ _('return_licenses', default='Return Licenses') }}</h2>
+        <button class="modal-close" onclick="closeReturnModal()" aria-label="{{ _('close') }}">&times;</button>
+      </div>
+      <div id="return-eid-info" style="padding: 16px; border-bottom: 1px solid var(--border); display: none;">
+        <p style="margin: 0; color: var(--muted); font-size: 0.9em;">{{ _('return_eid_label', default='EID to return:') }} <strong id="return-eid-value" class="eid-label"></strong></p>
+      </div>
+      <div id="return-status" style="padding: 16px; max-height: 240px; overflow-y: auto; display: none;">
+        <h3 style="margin: 0 0 12px 0; font-size: 1em;">{{ _('deactivation_steps', default='Deactivation') }}</h3>
+        <div id="return-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+      <div style="padding: 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end;">
+        <button onclick="closeReturnModal()" class="btn btn-ghost">{{ _('close') }}</button>
+      </div>
+    </div>
+  </div>
+
   <footer>
     <p style="margin:8px 0;">
       <button id="btn-refresh-eid" class="btn btn-ghost" style="font-size:0.9em;">
@@ -115,16 +153,30 @@ const FEATURE_GROUPS = {{ feature_groups_json|safe }};
 const I18N = {{ i18n_json|safe }};
 const refreshEidUrl = '/refresh-eid';
 const activateLicensesUrl = '/activate-licenses';
+const returnLicenseUrl = '/return-license';
+const returnBulkUrl = '/return-licenses-bulk';
+const crossIconUrl = "{{ url_for('static', filename='cross.svg') }}";
+const selectedEids = new Set();
+const selectAllCheckbox = document.getElementById('select-all-checkbox');
 const btnRefreshEid = document.getElementById('btn-refresh-eid');
 const btnRefreshEidLabel = document.getElementById('btn-refresh-eid-label');
 const btnAddLicenses = document.getElementById('btn-add-licenses');
+const btnBulkReturn = document.getElementById('btn-bulk-return');
 const btnActivate = document.getElementById('btn-activate');
 const licensesInput = document.getElementById('licenses-input');
 const addLicensesModal = document.getElementById('add-licenses-modal');
 const activationStatus = document.getElementById('activation-status');
 const activationList = document.getElementById('activation-list');
+const returnModal = document.getElementById('return-license-modal');
+const returnStatus = document.getElementById('return-status');
+const returnList = document.getElementById('return-list');
+const returnEidValue = document.getElementById('return-eid-value');
+const returnModalTitle = document.getElementById('return-modal-title');
+const returnEidInfo = document.getElementById('return-eid-info');
 let refreshing = false;
 let activating = false;
+let returning = false;
+let currentReturnEid = null;
 
 // Translation helper
 function t(key, params = {}) {
@@ -198,7 +250,9 @@ function renderEids() {
     filteredFeatures.forEach(f => {
       if (f.group === 'other') otherFeatures.push(f); else nonOtherFeatures.push(f);
     });
-    html += `<div class="eid-row"><div class="eid-label">${eid}</div><div class="eid-icons">`;
+    const returnLabel = I18N['return_license'] || 'Return License';
+    const isChecked = selectedEids.has(eid) ? 'checked' : '';
+    html += `<div class="eid-row"><div class="eid-header"><div class="eid-left-group"><input type="checkbox" class="eid-checkbox" data-eid="${eid}" ${isChecked} /><div class="eid-label">${eid}</div></div><div class="eid-actions"><button class="icon-btn btn-return" data-eid="${eid}" title="${returnLabel}"><img src="${crossIconUrl}" alt="${returnLabel}" /></button></div></div><div class="eid-icons">`;
     // Render non-other features individually (can duplicate group icons)
     nonOtherFeatures.forEach(f => {
       const g = f.group && groupInfoById[f.group] ? groupInfoById[f.group] : otherGroup;
@@ -225,6 +279,23 @@ function renderEids() {
   });
   container.innerHTML = html;
 
+  container.querySelectorAll('.eid-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', (e) => {
+      const eid = checkbox.getAttribute('data-eid');
+      if (checkbox.checked) {
+        selectedEids.add(eid);
+      } else {
+        selectedEids.delete(eid);
+      }
+      updateBulkReturnButton();
+      updateSelectAllCheckbox();
+    });
+  });
+
+  container.querySelectorAll('.btn-return').forEach(btn => {
+    btn.addEventListener('click', () => openReturnModal(btn.getAttribute('data-eid')));
+  });
+
   // Tooltip handling
   let activeTip = null;
   container.querySelectorAll('.icon-wrap').forEach(wrap => {
@@ -242,6 +313,8 @@ function renderEids() {
       if (activeTip) { activeTip.remove(); activeTip = null; }
     });
   });
+  
+  updateSelectAllCheckbox();
 }
 
 async function doRefreshEid(){
@@ -354,6 +427,13 @@ function closeAddLicensesModal() {
   addLicensesModal.classList.remove('show');
 }
 
+function closeReturnModal() {
+  currentReturnEid = null;
+  returnStatus.style.display = 'none';
+  returnList.innerHTML = '';
+  returnModal.classList.remove('show');
+}
+
 // Validate license key format: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX with hex digits
 function isValidLicenseKey(key) {
   const pattern = /^[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}$/;
@@ -437,9 +517,156 @@ async function activateLicenses() {
   }
 }
 
+function updateBulkReturnButton() {
+  if (selectedEids.size > 0) {
+    btnBulkReturn.classList.add('show');
+  } else {
+    btnBulkReturn.classList.remove('show');
+  }
+}
+
+function updateSelectAllCheckbox() {
+  const container = document.getElementById('eid-list');
+  const allCheckboxes = container.querySelectorAll('.eid-checkbox');
+  const allChecked = allCheckboxes.length > 0 && Array.from(allCheckboxes).every(cb => cb.checked);
+  const someChecked = Array.from(allCheckboxes).some(cb => cb.checked);
+  
+  selectAllCheckbox.checked = allChecked;
+  selectAllCheckbox.indeterminate = !allChecked && someChecked;
+}
+
+function toggleSelectAll() {
+  const container = document.getElementById('eid-list');
+  const allCheckboxes = container.querySelectorAll('.eid-checkbox');
+  const shouldCheck = selectAllCheckbox.checked;
+  
+  allCheckboxes.forEach(checkbox => {
+    const eid = checkbox.getAttribute('data-eid');
+    checkbox.checked = shouldCheck;
+    if (shouldCheck) {
+      selectedEids.add(eid);
+    } else {
+      selectedEids.delete(eid);
+    }
+  });
+  
+  updateBulkReturnButton();
+  updateSelectAllCheckbox();
+}
+
+selectAllCheckbox.addEventListener('change', toggleSelectAll);
+
+async function returnSelectedEids() {
+  if (selectedEids.size === 0) return;
+  
+  const eids = Array.from(selectedEids);
+  const processingText = I18N['deactivation_in_progress'] || 'Processing return';
+  const successText = I18N['return_success'] || 'License returned successfully';
+  
+  returnModalTitle.textContent = `${I18N['return_licenses'] || 'Return Licenses'} (${eids.length})`;
+  returnEidInfo.style.display = 'none';
+  returnModal.classList.add('show');
+  returnStatus.style.display = 'block';
+  returnList.innerHTML = '';
+  returning = true;
+
+  for (const eid of eids) {
+    const item = document.createElement('div');
+    item.className = 'activation-item pending';
+    item.innerHTML = `<span class="activation-icon">⏳</span><span class="activation-text">${eid}<br><small>${processingText}</small></span>`;
+    returnList.appendChild(item);
+
+    try {
+      const r = await fetch(returnLicenseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eid })
+      });
+      const data = await r.json().catch(() => null);
+
+      if (r.ok && data && data.ok) {
+        item.className = 'activation-item success';
+        item.innerHTML = `<span class="activation-icon">✓</span><span class="activation-text">${eid}<br><small>${successText}</small></span>`;
+        selectedEids.delete(eid);
+      } else {
+        const msg = data && data.error ? data.error : 'Unknown error';
+        item.className = 'activation-item error';
+        item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>${msg}</small></span>`;
+      }
+    } catch (e) {
+      item.className = 'activation-item error';
+      item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>Network error</small></span>`;
+    }
+  }
+  
+  returning = false;
+  try {
+    await doRefreshEid();
+  } catch (e) {
+    console.error('Failed to refresh after bulk return', e);
+  }
+  updateBulkReturnButton();
+}
+
 btnAddLicenses.addEventListener('click', openAddLicensesModal);
 btnActivate.addEventListener('click', activateLicenses);
+btnBulkReturn.addEventListener('click', returnSelectedEids);
 btnRefreshEid.addEventListener('click', doRefreshEid);
+</script>
+
+<script>
+function openReturnModal(eid) {
+  if (!eid) return;
+  currentReturnEid = eid;
+  returnEidValue.textContent = eid;
+  returnEidInfo.style.display = 'block';
+  returnStatus.style.display = 'block';
+  returnList.innerHTML = '';
+  returnModalTitle.textContent = I18N['return_licenses'] || 'Return Licenses';
+  returnModal.classList.add('show');
+  startReturnFlow(eid);
+}
+
+async function startReturnFlow(eid) {
+  if (returning) return;
+  returning = true;
+
+  const processingText = I18N['deactivation_in_progress'] || 'Processing return';
+  const successText = I18N['return_success'] || 'License returned successfully';
+
+  const item = document.createElement('div');
+  item.className = 'activation-item pending';
+  item.innerHTML = `<span class="activation-icon">⏳</span><span class="activation-text">${eid}<br><small>${processingText}</small></span>`;
+  returnList.appendChild(item);
+
+  try {
+    const r = await fetch(returnLicenseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eid })
+    });
+    const data = await r.json().catch(() => null);
+
+    if (r.ok && data && data.ok) {
+      item.className = 'activation-item success';
+      item.innerHTML = `<span class="activation-icon">✓</span><span class="activation-text">${eid}<br><small>${successText}</small></span>`;
+      try {
+        await doRefreshEid();
+      } catch (e) {
+        console.error('Failed to refresh after return', e);
+      }
+    } else {
+      const msg = data && data.error ? data.error : 'Unknown error';
+      item.className = 'activation-item error';
+      item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>${msg}</small></span>`;
+    }
+  } catch (e) {
+    item.className = 'activation-item error';
+    item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>Network error</small></span>`;
+  } finally {
+    returning = false;
+  }
+}
 </script>
 </body>
 </html>

@@ -87,5 +87,13 @@
   "users_count_suffix": "s",
   "latest_release": "Latest release: v{version} ({date})",
   "last_compatible_release": "Last compatible release: v{version} ({date})",
-  "users_count": "{n} user{suffix}"
+  "users_count": "{n} user{suffix}",
+  "return_licenses": "Return Licenses",
+  "return_license": "Return License",
+  "return_eid_label": "EID to return:",
+  "return_selected": "Return Selected",
+  "select_all": "Select All",
+  "deactivation_steps": "Deactivation",
+  "deactivation_in_progress": "Processing return",
+  "return_success": "License returned successfully"
 }

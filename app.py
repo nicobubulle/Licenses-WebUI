@@ -3033,6 +3033,84 @@ def activate_licenses_route():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@app.route("/return-license", methods=["POST"])
+def return_license_route():
+    """Return a license (deactivation) for a given EID."""
+    # Check EID access
+    has_access, _ = check_eid_access()
+
+    if not has_access:
+        logger.warning("Non-admin user attempted to return license (SHOW_EID_INFO disabled)")
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+
+    try:
+        data = request.get_json()
+        if not data or 'eid' not in data:
+            return jsonify({"ok": False, "error": "Missing eid parameter"}), 400
+
+        eid = data['eid'].strip()
+
+        # Validate format (same as activation keys)
+        import re as regex
+        if not regex.match(r'^[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}$', eid):
+            return jsonify({"ok": False, "error": "Invalid EID format"}), 400
+
+        # Run CLM return command (hide console window on Windows)
+        try:
+            clm_dir = os.path.dirname(LMUTIL_PATH)
+            clm_path = os.path.join(clm_dir, "CLMCommandLine.exe")
+
+            if not os.path.exists(clm_path):
+                return jsonify({"ok": False, "error": f"CLMCommandLine.exe not found at {clm_path}"}), 500
+
+            startupinfo = None
+            if sys.platform == 'win32':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
+            result = subprocess.run(
+                [clm_path, "return", eid],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                startupinfo=startupinfo
+            )
+
+            output = result.stdout + result.stderr
+
+            if result.returncode == 0 and "Command executed successfully" in output:
+                logger.info(f"License returned: {eid}")
+                return jsonify({"ok": True, "message": "License returned successfully"})
+            else:
+                error_msg = "Return failed"
+
+                if "Command failed with error code" in output:
+                    match = regex.search(r'Command failed with error code \d+: "([^"]*)"', output)
+                    if match:
+                        error_msg = match.group(1).strip()
+                    else:
+                        match = regex.search(r'Command failed with error code [^\n]*', output)
+                        if match:
+                            error_msg = match.group(0).strip()
+                else:
+                    lines = [l.strip() for l in output.split('\n') if l.strip() and not l.startswith('[')]
+                    if lines:
+                        error_msg = lines[-1]
+
+                logger.warning(f"License return failed for {eid}: {error_msg}")
+                return jsonify({"ok": False, "error": error_msg}), 400
+        except subprocess.TimeoutExpired:
+            return jsonify({"ok": False, "error": "CLM command timed out (>60s)"}), 500
+        except Exception as e:
+            logger.error(f"CLM return error: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": f"Failed to execute CLM: {str(e)}"}), 500
+
+    except Exception as e:
+        logger.error(f"License return route error: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/refresh-license-versions", methods=["POST"])
 def refresh_license_versions_route():
     """Manually refresh license versions cache."""
