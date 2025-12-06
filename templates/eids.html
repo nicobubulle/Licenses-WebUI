@@ -9,14 +9,15 @@
     :root{
       --primary:#007bff; --danger:#dc3545; --muted:#666; --card:#f9f9f9; --surface:#ffffff; --border:#e6e6e6; --radius:8px;
     }
-    body { font-family: Arial, Helvetica, sans-serif; margin:20px; background:#fafafa; color:#111; }
-    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; }
+    body { font-family: Arial, Helvetica, sans-serif; margin:0; padding:20px; background:#fafafa; color:#111; overflow-x:hidden; }
+    header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
     h1 { font-size:1.25rem; margin:0; }
-    .toolbar { display:flex; gap:8px; align-items:center; }
-    .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-weight:600; text-decoration:none; color:#111; }
+    .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .btn { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; border:1px solid var(--border); background:var(--surface); cursor:pointer; font-weight:600; text-decoration:none; color:#111; white-space:nowrap; }
+    .btn:disabled { opacity:0.5; cursor:not-allowed; }
     .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
-    .card { background:var(--card); padding:16px; border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; }
+    .card { background:var(--card); padding:16px; border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; max-width:100%; }
     .eid-row { background:var(--surface); padding:12px 14px; border:1px solid var(--border); border-radius:6px; margin-bottom:10px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
     .eid-label { font-weight:700; font-family:monospace; margin-right:8px; }
     .eid-icons { display:flex; gap:12px; flex-wrap:wrap; }
@@ -24,9 +25,22 @@
     .icon-wrap img { max-width:36px; max-height:36px; object-fit:contain; }
     .badge { position:absolute; top:0; right:0; background:#dc3545; color:#fff; font-size:11px; padding:2px 5px; border-radius:12px; line-height:1; box-shadow:0 1px 3px rgba(0,0,0,0.25); font-weight:600; }
     .tooltip { position:absolute; z-index:2000; background:#222; color:#fff; padding:6px 8px; border-radius:6px; font-size:12px; max-width:280px; box-shadow:0 4px 14px rgba(0,0,0,0.25); pointer-events:none; white-space:normal; word-break:break-word; }
-    footer { margin-top:32px; padding-top:16px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:0.85em; }
+    footer { margin-top:32px; padding-top:16px; border-top:1px solid var(--border); text-align:center; color:var(--muted); font-size:0.85em; word-break:break-word; }
     footer a { color: var(--primary); text-decoration:none; }
     .empty { padding:24px; text-align:center; color:var(--muted); font-size:0.95em; }
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+    .modal.show { display: flex; }
+    .modal-content { background: white; border-radius: 8px; padding: 0; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3); position: relative; width: 100%; max-width: 600px; box-sizing: border-box; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px; border-bottom: 2px solid var(--border); gap: 12px; }
+    .modal-header h2 { margin: 0; font-size: 1.25rem; word-break: break-word; }
+    .modal-close { background: transparent; border: none; font-size: 24px; cursor: pointer; color: var(--muted); padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .modal-close:hover { color: #000; }
+    .activation-item { display: flex; align-items: center; gap: 8px; padding: 8px; background: var(--card); border-radius: 4px; font-family: monospace; font-size: 0.85em; overflow-x: auto; }
+    .activation-item.success { background: #d4edda; color: #155724; }
+    .activation-item.error { background: #f8d7da; color: #721c24; }
+    .activation-item.pending { background: #e7e7ff; color: #0056d6; }
+    .activation-icon { font-size: 1.2em; min-width: 20px; flex-shrink: 0; }
+    .activation-text { flex: 1; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -42,13 +56,41 @@
   </header>
 
   <div class="card" id="eid-container">
-    <div style="margin-bottom: 16px;">
-      <label for="group-filter" style="display: inline-block; margin-right: 8px; font-weight: 600;">{{ _('filter_by_app', default='Filter by app:') }}</label>
-      <select id="group-filter" style="padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 1em; cursor: pointer;">
-        <option value="">{{ _('all_features', default='All Features') }}</option>
-      </select>
+    <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+      <div>
+        <label for="group-filter" style="display: inline-block; margin-right: 8px; font-weight: 600;">{{ _('filter_by_app', default='Filter by app:') }}</label>
+        <select id="group-filter" style="padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 1em; cursor: pointer;">
+          <option value="">{{ _('all_features', default='All Features') }}</option>
+        </select>
+      </div>
+      <button id="btn-add-licenses" class="btn btn-primary" style="font-size: 0.9em;">
+        <img src="{{ url_for('static', filename='plus.svg') }}" alt="" width="16" height="16" style="filter:brightness(0) invert(1);" aria-hidden="true" />
+        {{ _('add_licenses', default='Add Licenses') }}
+      </button>
     </div>
     <div id="eid-list"></div>
+  </div>
+
+  <!-- Add Licenses Modal -->
+  <div id="add-licenses-modal" class="modal" onclick="if(event.target===this) closeAddLicensesModal()">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>{{ _('add_licenses', default='Add Licenses') }}</h2>
+        <button class="modal-close" onclick="closeAddLicensesModal()" aria-label="{{ _('close') }}">&times;</button>
+      </div>
+      <div style="padding: 16px; border-bottom: 1px solid var(--border);">
+        <p style="margin: 0 0 12px 0; color: var(--muted); font-size: 0.9em;">{{ _('licenses_format_hint', default='Enter license keys one per line (format: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX)') }}</p>
+        <textarea id="licenses-input" style="width: 100%; min-height: 120px; padding: 8px; border: 1px solid var(--border); border-radius: 4px; font-family: monospace; font-size: 0.9em; box-sizing: border-box;" placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX&#10;XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"></textarea>
+      </div>
+      <div id="activation-status" style="padding: 16px; max-height: 300px; overflow-y: auto; display: none;">
+        <h3 style="margin: 0 0 12px 0; font-size: 1em;">{{ _('activation_status', default='Activation Status') }}</h3>
+        <div id="activation-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+      <div style="padding: 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end;">
+        <button onclick="closeAddLicensesModal()" class="btn btn-ghost">{{ _('close') }}</button>
+        <button id="btn-activate" class="btn btn-primary" disabled>{{ _('activate', default='Activate') }}</button>
+      </div>
+    </div>
   </div>
 
   <footer>
@@ -72,9 +114,17 @@ const EIDS = {{ eids_json|safe }};
 const FEATURE_GROUPS = {{ feature_groups_json|safe }};
 const I18N = {{ i18n_json|safe }};
 const refreshEidUrl = '/refresh-eid';
+const activateLicensesUrl = '/activate-licenses';
 const btnRefreshEid = document.getElementById('btn-refresh-eid');
 const btnRefreshEidLabel = document.getElementById('btn-refresh-eid-label');
+const btnAddLicenses = document.getElementById('btn-add-licenses');
+const btnActivate = document.getElementById('btn-activate');
+const licensesInput = document.getElementById('licenses-input');
+const addLicensesModal = document.getElementById('add-licenses-modal');
+const activationStatus = document.getElementById('activation-status');
+const activationList = document.getElementById('activation-list');
 let refreshing = false;
+let activating = false;
 
 // Translation helper
 function t(key, params = {}) {
@@ -290,6 +340,105 @@ function populateGroupFilter() {
 
 renderEids();
 populateGroupFilter();
+
+// Modal functions
+function openAddLicensesModal() {
+  licensesInput.value = '';
+  activationStatus.style.display = 'none';
+  activationList.innerHTML = '';
+  btnActivate.disabled = false;
+  addLicensesModal.classList.add('show');
+}
+
+function closeAddLicensesModal() {
+  addLicensesModal.classList.remove('show');
+}
+
+// Validate license key format: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX with hex digits
+function isValidLicenseKey(key) {
+  const pattern = /^[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}$/;
+  return pattern.test(key.trim());
+}
+
+async function activateLicenses() {
+  const input = licensesInput.value.trim();
+  if (!input) {
+    alert(t('no_licenses_provided', t('no_licenses_provided')));
+    return;
+  }
+  
+  const lines = input.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const validKeys = [];
+  const invalidKeys = [];
+  
+  lines.forEach(line => {
+    if (isValidLicenseKey(line)) {
+      validKeys.push(line);
+    } else {
+      invalidKeys.push(line);
+    }
+  });
+  
+  if (invalidKeys.length > 0) {
+    alert(`Invalid license key format:\n${invalidKeys.join('\n')}\n\nFormat: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX`);
+    return;
+  }
+  
+  if (validKeys.length === 0) return;
+  
+  activating = true;
+  btnActivate.disabled = true;
+  activationStatus.style.display = 'block';
+  activationList.innerHTML = '';
+  
+  // Show all as pending first
+  validKeys.forEach(key => {
+    const item = document.createElement('div');
+    item.className = 'activation-item pending';
+    item.innerHTML = `<span class="activation-icon">⏳</span><span class="activation-text">${key}</span>`;
+    activationList.appendChild(item);
+  });
+  
+  // Activate each license and update status
+  for (let i = 0; i < validKeys.length; i++) {
+    const key = validKeys[i];
+    try {
+      const r = await fetch(activateLicensesUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ license_key: key })
+      });
+      const data = await r.json().catch(() => null);
+      
+      const itemElement = activationList.children[i];
+      if (r.ok && data && data.ok) {
+        itemElement.className = 'activation-item success';
+        itemElement.innerHTML = `<span class="activation-icon">✓</span><span class="activation-text">${key}</span>`;
+      } else {
+        const errorMsg = data && data.error ? data.error : 'Unknown error';
+        itemElement.className = 'activation-item error';
+        itemElement.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${key}<br><small>${errorMsg}</small></span>`;
+      }
+    } catch (e) {
+      const itemElement = activationList.children[i];
+      itemElement.className = 'activation-item error';
+      itemElement.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${key}<br><small>Network error</small></span>`;
+    }
+  }
+  
+  activating = false;
+  btnActivate.disabled = false;
+  
+  // Refresh EID cache after activation
+  try {
+    await doRefreshEid();
+  } catch (e) {
+    console.error('Failed to refresh EID cache after activation', e);
+  }
+}
+
+btnAddLicenses.addEventListener('click', openAddLicensesModal);
+btnActivate.addEventListener('click', activateLicenses);
 btnRefreshEid.addEventListener('click', doRefreshEid);
 </script>
 </body>

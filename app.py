@@ -2719,21 +2719,39 @@ def stats():
         admin_mode=admin_mode
     )
 
-@app.route("/eids")
-def eids_page():
-    """Application admin EID overview page."""
-    # Determine app-level admin mode (cookie or query)
-    admin_mode = False
+
+# ---------- EID Access Control ----------
+
+def check_eid_access():
+    """Check if user has access to EID routes.
+    
+    If SHOW_EID_INFO is disabled, only admins can access.
+    Returns: (has_access: bool, admin_mode: bool)
+    """
     try:
         param_admin = request.args.get("admin")
         cookie_admin = request.cookies.get("admin")
-        if (param_admin and ADMIN_KEY and param_admin == ADMIN_KEY) or (cookie_admin and ADMIN_KEY and cookie_admin == ADMIN_KEY):
-            admin_mode = True
+        is_admin = (param_admin and ADMIN_KEY and param_admin == ADMIN_KEY) or \
+                   (cookie_admin and ADMIN_KEY and cookie_admin == ADMIN_KEY)
     except Exception:
-        admin_mode = False
+        is_admin = False
+    
+    # If show_eid_info is enabled, anyone can access
+    if SHOW_EID_INFO:
+        return True, is_admin
+    
+    # If disabled, only admins can access
+    return is_admin, is_admin
 
-    if not admin_mode:
-        # Non-admins are redirected to dashboard
+
+@app.route("/eids")
+def eids_page():
+    """Application admin EID overview page."""
+    # Check EID access
+    has_access, admin_mode = check_eid_access()
+    
+    if not has_access:
+        logger.warning("Non-admin user attempted to access EID page (SHOW_EID_INFO disabled)")
         return redirect(url_for("index"))
 
     # If CLM is unavailable, redirect to dashboard
@@ -2909,6 +2927,13 @@ def api_stats():
 @app.route("/refresh-eid", methods=["POST"])
 def refresh_eid_route():
     """Manually refresh EID cache."""
+    # Check EID access
+    has_access, _ = check_eid_access()
+    
+    if not has_access:
+        logger.warning("Non-admin user attempted to refresh EID (SHOW_EID_INFO disabled)")
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+    
     logger.info("Manual EID refresh requested")
     try:
         success = refresh_eid_cache()
@@ -2919,6 +2944,92 @@ def refresh_eid_route():
             return jsonify({"ok": False, "error": error_msg}), 500
     except Exception as e:
         logger.error(f"EID refresh error: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/activate-licenses", methods=["POST"])
+def activate_licenses_route():
+    """Activate a single license key."""
+    # Check EID access
+    has_access, _ = check_eid_access()
+    
+    if not has_access:
+        logger.warning("Non-admin user attempted to activate license (SHOW_EID_INFO disabled)")
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+    
+    try:
+        data = request.get_json()
+        if not data or 'license_key' not in data:
+            return jsonify({"ok": False, "error": "Missing license_key parameter"}), 400
+        
+        license_key = data['license_key'].strip()
+        
+        # Validate format
+        import re as regex
+        if not regex.match(r'^[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}$', license_key):
+            return jsonify({"ok": False, "error": "Invalid license key format"}), 400
+        
+        # Run CLM activate command (hide console window on Windows)
+        try:
+            # Get CLMCommandLine.exe path (same directory as lmutil.exe)
+            clm_dir = os.path.dirname(LMUTIL_PATH)
+            clm_path = os.path.join(clm_dir, "CLMCommandLine.exe")
+            
+            if not os.path.exists(clm_path):
+                return jsonify({"ok": False, "error": f"CLMCommandLine.exe not found at {clm_path}"}), 500
+            
+            # Windows-specific: hide console window
+            startupinfo = None
+            if sys.platform == 'win32':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+            
+            result = subprocess.run(
+                [clm_path, "activate", license_key],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                startupinfo=startupinfo
+            )
+            
+            # Check for success message
+            output = result.stdout + result.stderr
+            
+            if result.returncode == 0 and "Command executed successfully" in output:
+                logger.info(f"License activated: {license_key}")
+                return jsonify({"ok": True, "message": "License activated successfully"})
+            else:
+                # Try to extract error message from output
+                error_msg = "Activation failed"
+                
+                # Look for "Command failed with error code XX:" pattern
+                if "Command failed with error code" in output:
+                    # Extract the quoted message after the error code
+                    match = regex.search(r'Command failed with error code \d+: "([^"]*)"', output)
+                    if match:
+                        error_msg = match.group(1).strip()
+                    else:
+                        # If no quoted message, try to get the whole error line
+                        match = regex.search(r'Command failed with error code [^\n]*', output)
+                        if match:
+                            error_msg = match.group(0).strip()
+                else:
+                    # Fallback: use last non-empty line or output
+                    lines = [l.strip() for l in output.split('\n') if l.strip() and not l.startswith('[')]
+                    if lines:
+                        error_msg = lines[-1]
+                
+                logger.warning(f"License activation failed for {license_key}: {error_msg}")
+                return jsonify({"ok": False, "error": error_msg}), 400
+        except subprocess.TimeoutExpired:
+            return jsonify({"ok": False, "error": "CLM command timed out (>60s)"}), 500
+        except Exception as e:
+            logger.error(f"CLM activation error: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": f"Failed to execute CLM: {str(e)}"}), 500
+            
+    except Exception as e:
+        logger.error(f"License activation route error: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
