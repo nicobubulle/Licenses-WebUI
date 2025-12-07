@@ -147,6 +147,11 @@ Access the dashboard via the "📊 Statistics" button in the main UI toolbar.
 ## Version Information Display
 Each user checkout displays detailed version information with visual indicators:
 
+**Colorization and Tooltips**
+- Feature versions are colorized according to release dates declared in `feature_groups.json` via a `releases` array like `{ "app_version": "2024.0411", "date": "2024-04-11" }`.
+- Tooltips are localized using i18n keys: `latest_release`, `last_compatible_release`, and `version_unknown`.
+- Users are grouped under the same `feature_version` within a feature, showing a localized count (`users_count` + `users_count_suffix`).
+
 **Version Types:**
 - **🔑 Feature Version**: The version of the license feature itself (e.g., v2024.0411)
 - **💻 Application Version**: The version of the application the user is running (e.g., v2023.1101)
@@ -228,11 +233,6 @@ Translation files live in `i18n/` as JSON. Supported locales are loaded from `ap
 3. Add locale code to `SUPPORTED_LOCALES` in `app.py` if needed.
 
 Locale negotiation: `?lang=xx` query param → `lang` cookie → `Accept-Language` → default.
-
-### Colorization and Tooltips
-- Feature versions are colorized according to release dates declared in `feature_groups.json` via a `releases` array like `{ "app_version": "2024.0411", "date": "2024-04-11" }`.
-- Tooltips are localized using i18n keys: `latest_release`, `last_compatible_release`, and `version_unknown`.
-- Users are grouped under the same `feature_version` within a feature, showing a localized count (`users_count` + `users_count_suffix`).
 
 ## Configuration details
 `config.ini` is created automatically with example values on first run. Missing configuration keys are automatically added with default values when the application starts, and a backup (`.bak`) is created before any updates. Edit and restart the application. Unknown keys are ignored. Percent symbols (%) in webhook URLs are preserved using raw read mode.
