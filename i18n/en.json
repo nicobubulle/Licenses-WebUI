@@ -96,4 +96,12 @@
   "deactivation_steps": "Deactivation",
   "deactivation_in_progress": "Processing return",
   "return_success": "License returned successfully"
+  "update_license": "Update License",
+  "update_licenses": "Update Licenses",
+  "update_selected": "Update Selected",
+  "update_in_progress": "Updating license",
+  "update_success": "License updated successfully",
+  "update_not_available": "No update available for this EID",
+  "update_eid_label": "EID to update:",
+  "update_steps": "Update",
 }

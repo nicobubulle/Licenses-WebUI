@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root{
-      --primary:#007bff; --danger:#dc3545; --muted:#666; --card:#f9f9f9; --surface:#ffffff; --border:#e6e6e6; --radius:8px;
+      --primary:#007bff; --danger:#dc3545; --info:#17a2b8; --muted:#666; --card:#f9f9f9; --surface:#ffffff; --border:#e6e6e6; --radius:8px;
     }
     body { font-family: Arial, Helvetica, sans-serif; margin:0; padding:20px; background:#fafafa; color:#111; overflow-x:hidden; }
     header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
@@ -17,6 +17,7 @@
     .btn:disabled { opacity:0.5; cursor:not-allowed; }
     .btn-primary { background: linear-gradient(180deg,var(--primary),#0056d6); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-danger { background: linear-gradient(180deg,var(--danger),#c82333); color:#fff; border-color:rgba(0,0,0,0.08); }
+    .btn-info { background: linear-gradient(180deg,var(--info),#138496); color:#fff; border-color:rgba(0,0,0,0.08); }
     .btn-ghost { background:transparent; border:1px solid var(--border); color:var(--muted); font-weight:500; }
     .card { background:var(--card); padding:16px; border-radius:var(--radius); box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:16px; max-width:100%; }
     .eid-row { background:var(--surface); padding:12px 14px; border:1px solid var(--border); border-radius:6px; margin-bottom:10px; display:flex; flex-direction:column; align-items:flex-start; gap:10px; }
@@ -27,9 +28,12 @@
     .eid-actions { display:flex; align-items:center; gap:8px; flex-shrink:0; }
     .btn-bulk-return { display:none; }
     .btn-bulk-return.show { display:inline-flex; }
+    .btn-bulk-update { display:none; }
+    .btn-bulk-update.show { display:inline-flex; }
     .icon-btn { width:32px; height:32px; border:1px solid var(--border); border-radius:50%; background:var(--surface); cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; }
     .icon-btn:hover { background:#f0f4ff; }
     .icon-btn img { width:16px; height:16px; filter: invert(39%) sepia(71%) saturate(2660%) hue-rotate(336deg) brightness(96%) contrast(96%); }
+    .btn-update img { filter: invert(48%) sepia(79%) saturate(2476%) hue-rotate(162deg) brightness(91%) contrast(83%); }
     .eid-icons { display:flex; gap:12px; flex-wrap:wrap; }
     .icon-wrap { position:relative; width:40px; height:40px; display:flex; align-items:center; justify-content:center; }
     .icon-wrap img { max-width:36px; max-height:36px; object-fit:contain; }
@@ -49,6 +53,7 @@
     .activation-item.success { background: #d4edda; color: #155724; }
     .activation-item.error { background: #f8d7da; color: #721c24; }
     .activation-item.pending { background: #e7e7ff; color: #0056d6; }
+    .activation-item.warning { background: #fff3cd; color: #856404; }
     .activation-icon { font-size: 1.2em; min-width: 20px; flex-shrink: 0; }
     .activation-text { flex: 1; word-break: break-all; }
   </style>
@@ -80,6 +85,10 @@
       <button id="btn-bulk-return" class="btn btn-danger btn-bulk-return" style="font-size: 0.9em;">
         <img src="{{ url_for('static', filename='cross.svg') }}" alt="" width="16" height="16" style="filter:brightness(0) invert(1);" aria-hidden="true" />
         {{ _('return_selected', default='Return Selected') }}
+      </button>
+      <button id="btn-bulk-update" class="btn btn-info btn-bulk-update" style="font-size: 0.9em;">
+        <img src="{{ url_for('static', filename='down.svg') }}" alt="" width="16" height="16" style="filter:brightness(0) invert(1);" aria-hidden="true" />
+        {{ _('update_selected', default='Update Selected') }}
       </button>
     </div>
     <div style="margin-bottom: 8px; padding: 8px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; gap: 8px;">
@@ -131,6 +140,26 @@
     </div>
   </div>
 
+  <!-- Update Licenses Modal -->
+  <div id="update-license-modal" class="modal" onclick="if(event.target===this) closeUpdateModal()">
+    <div class="modal-content" style="max-width: 520px;">
+      <div class="modal-header">
+        <h2 id="update-modal-title">{{ _('update_licenses', default='Update Licenses') }}</h2>
+        <button class="modal-close" onclick="closeUpdateModal()" aria-label="{{ _('close') }}">&times;</button>
+      </div>
+      <div id="update-eid-info" style="padding: 16px; border-bottom: 1px solid var(--border); display: none;">
+        <p style="margin: 0; color: var(--muted); font-size: 0.9em;">{{ _('update_eid_label', default='EID to update:') }} <strong id="update-eid-value" class="eid-label"></strong></p>
+      </div>
+      <div id="update-status" style="padding: 16px; max-height: 240px; overflow-y: auto; display: none;">
+        <h3 style="margin: 0 0 12px 0; font-size: 1em;">{{ _('update_steps', default='Update') }}</h3>
+        <div id="update-list" style="display: flex; flex-direction: column; gap: 8px;"></div>
+      </div>
+      <div style="padding: 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end;">
+        <button onclick="closeUpdateModal()" class="btn btn-ghost">{{ _('close') }}</button>
+      </div>
+    </div>
+  </div>
+
   <footer>
     <p style="margin:8px 0;">
       <button id="btn-refresh-eid" class="btn btn-ghost" style="font-size:0.9em;">
@@ -154,14 +183,16 @@ const I18N = {{ i18n_json|safe }};
 const refreshEidUrl = '/refresh-eid';
 const activateLicensesUrl = '/activate-licenses';
 const returnLicenseUrl = '/return-license';
-const returnBulkUrl = '/return-licenses-bulk';
+const updateLicenseUrl = '/update-license';
 const crossIconUrl = "{{ url_for('static', filename='cross.svg') }}";
+const downIconUrl = "{{ url_for('static', filename='down.svg') }}";
 const selectedEids = new Set();
 const selectAllCheckbox = document.getElementById('select-all-checkbox');
 const btnRefreshEid = document.getElementById('btn-refresh-eid');
 const btnRefreshEidLabel = document.getElementById('btn-refresh-eid-label');
 const btnAddLicenses = document.getElementById('btn-add-licenses');
 const btnBulkReturn = document.getElementById('btn-bulk-return');
+const btnBulkUpdate = document.getElementById('btn-bulk-update');
 const btnActivate = document.getElementById('btn-activate');
 const licensesInput = document.getElementById('licenses-input');
 const addLicensesModal = document.getElementById('add-licenses-modal');
@@ -173,10 +204,18 @@ const returnList = document.getElementById('return-list');
 const returnEidValue = document.getElementById('return-eid-value');
 const returnModalTitle = document.getElementById('return-modal-title');
 const returnEidInfo = document.getElementById('return-eid-info');
+const updateModal = document.getElementById('update-license-modal');
+const updateStatus = document.getElementById('update-status');
+const updateList = document.getElementById('update-list');
+const updateEidValue = document.getElementById('update-eid-value');
+const updateModalTitle = document.getElementById('update-modal-title');
+const updateEidInfo = document.getElementById('update-eid-info');
 let refreshing = false;
 let activating = false;
 let returning = false;
+let updating = false;
 let currentReturnEid = null;
+let currentUpdateEid = null;
 
 // Translation helper
 function t(key, params = {}) {
@@ -251,8 +290,9 @@ function renderEids() {
       if (f.group === 'other') otherFeatures.push(f); else nonOtherFeatures.push(f);
     });
     const returnLabel = I18N['return_license'] || 'Return License';
+    const updateLabel = I18N['update_license'] || 'Update License';
     const isChecked = selectedEids.has(eid) ? 'checked' : '';
-    html += `<div class="eid-row"><div class="eid-header"><div class="eid-left-group"><input type="checkbox" class="eid-checkbox" data-eid="${eid}" ${isChecked} /><div class="eid-label">${eid}</div></div><div class="eid-actions"><button class="icon-btn btn-return" data-eid="${eid}" title="${returnLabel}"><img src="${crossIconUrl}" alt="${returnLabel}" /></button></div></div><div class="eid-icons">`;
+    html += `<div class="eid-row"><div class="eid-header"><div class="eid-left-group"><input type="checkbox" class="eid-checkbox" data-eid="${eid}" ${isChecked} /><div class="eid-label">${eid}</div></div><div class="eid-actions"><button class="icon-btn btn-return" data-eid="${eid}" title="${returnLabel}"><img src="${crossIconUrl}" alt="${returnLabel}" /></button><button class="icon-btn btn-update" data-eid="${eid}" title="${updateLabel}"><img src="${downIconUrl}" alt="${updateLabel}" /></button></div></div><div class="eid-icons">`;
     // Render non-other features individually (can duplicate group icons)
     nonOtherFeatures.forEach(f => {
       const g = f.group && groupInfoById[f.group] ? groupInfoById[f.group] : otherGroup;
@@ -287,13 +327,17 @@ function renderEids() {
       } else {
         selectedEids.delete(eid);
       }
-      updateBulkReturnButton();
+      updateBulkButtons();
       updateSelectAllCheckbox();
     });
   });
 
   container.querySelectorAll('.btn-return').forEach(btn => {
     btn.addEventListener('click', () => openReturnModal(btn.getAttribute('data-eid')));
+  });
+
+  container.querySelectorAll('.btn-update').forEach(btn => {
+    btn.addEventListener('click', () => openUpdateModal(btn.getAttribute('data-eid')));
   });
 
   // Tooltip handling
@@ -314,6 +358,7 @@ function renderEids() {
     });
   });
   
+  updateBulkButtons();
   updateSelectAllCheckbox();
 }
 
@@ -434,6 +479,13 @@ function closeReturnModal() {
   returnModal.classList.remove('show');
 }
 
+function closeUpdateModal() {
+  currentUpdateEid = null;
+  updateStatus.style.display = 'none';
+  updateList.innerHTML = '';
+  updateModal.classList.remove('show');
+}
+
 // Validate license key format: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX with hex digits
 function isValidLicenseKey(key) {
   const pattern = /^[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}-[0-9A-Fa-f]{5}$/;
@@ -517,11 +569,13 @@ async function activateLicenses() {
   }
 }
 
-function updateBulkReturnButton() {
+function updateBulkButtons() {
   if (selectedEids.size > 0) {
     btnBulkReturn.classList.add('show');
+    btnBulkUpdate.classList.add('show');
   } else {
     btnBulkReturn.classList.remove('show');
+    btnBulkUpdate.classList.remove('show');
   }
 }
 
@@ -550,7 +604,7 @@ function toggleSelectAll() {
     }
   });
   
-  updateBulkReturnButton();
+  updateBulkButtons();
   updateSelectAllCheckbox();
 }
 
@@ -605,12 +659,71 @@ async function returnSelectedEids() {
   } catch (e) {
     console.error('Failed to refresh after bulk return', e);
   }
-  updateBulkReturnButton();
+  updateBulkButtons();
+}
+
+async function updateSelectedEids() {
+  if (selectedEids.size === 0) return;
+  const eids = Array.from(selectedEids);
+  const processingText = I18N['update_in_progress'] || 'Updating license';
+  const successText = I18N['update_success'] || 'License updated successfully';
+  const noUpdateText = I18N['update_not_available'] || 'No update available for this EID';
+
+  updateModalTitle.textContent = `${I18N['update_licenses'] || 'Update Licenses'} (${eids.length})`;
+  updateEidInfo.style.display = 'none';
+  updateModal.classList.add('show');
+  updateStatus.style.display = 'block';
+  updateList.innerHTML = '';
+  updating = true;
+
+  for (const eid of eids) {
+    const item = document.createElement('div');
+    item.className = 'activation-item pending';
+    item.innerHTML = `<span class="activation-icon">⏳</span><span class="activation-text">${eid}<br><small>${processingText}</small></span>`;
+    updateList.appendChild(item);
+
+    try {
+      const r = await fetch(updateLicenseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eid })
+      });
+      const data = await r.json().catch(() => null);
+
+      if (r.ok && data && data.ok) {
+        if (data.warning) {
+          const warnText = noUpdateText;
+          item.className = 'activation-item warning';
+          item.innerHTML = `<span class="activation-icon">⚠</span><span class="activation-text">${eid}<br><small>${warnText}</small></span>`;
+        } else {
+          item.className = 'activation-item success';
+          item.innerHTML = `<span class="activation-icon">✓</span><span class="activation-text">${eid}<br><small>${successText}</small></span>`;
+          selectedEids.delete(eid);
+        }
+      } else {
+        const msg = data && data.error ? data.error : 'Unknown error';
+        item.className = 'activation-item error';
+        item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>${msg}</small></span>`;
+      }
+    } catch (e) {
+      item.className = 'activation-item error';
+      item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>Network error</small></span>`;
+    }
+  }
+
+  updating = false;
+  try {
+    await doRefreshEid();
+  } catch (e) {
+    console.error('Failed to refresh after bulk update', e);
+  }
+  updateBulkButtons();
 }
 
 btnAddLicenses.addEventListener('click', openAddLicensesModal);
 btnActivate.addEventListener('click', activateLicenses);
 btnBulkReturn.addEventListener('click', returnSelectedEids);
+btnBulkUpdate.addEventListener('click', updateSelectedEids);
 btnRefreshEid.addEventListener('click', doRefreshEid);
 </script>
 
@@ -625,6 +738,18 @@ function openReturnModal(eid) {
   returnModalTitle.textContent = I18N['return_licenses'] || 'Return Licenses';
   returnModal.classList.add('show');
   startReturnFlow(eid);
+}
+
+function openUpdateModal(eid) {
+  if (!eid) return;
+  currentUpdateEid = eid;
+  updateEidValue.textContent = eid;
+  updateEidInfo.style.display = 'block';
+  updateStatus.style.display = 'block';
+  updateList.innerHTML = '';
+  updateModalTitle.textContent = I18N['update_licenses'] || 'Update Licenses';
+  updateModal.classList.add('show');
+  startUpdateFlow(eid);
 }
 
 async function startReturnFlow(eid) {
@@ -665,6 +790,54 @@ async function startReturnFlow(eid) {
     item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>Network error</small></span>`;
   } finally {
     returning = false;
+  }
+}
+
+async function startUpdateFlow(eid) {
+  if (updating) return;
+  updating = true;
+
+  const processingText = I18N['update_in_progress'] || 'Updating license';
+  const successText = I18N['update_success'] || 'License updated successfully';
+  const noUpdateText = I18N['update_not_available'] || 'No update available for this EID';
+
+  const item = document.createElement('div');
+  item.className = 'activation-item pending';
+  item.innerHTML = `<span class="activation-icon">⏳</span><span class="activation-text">${eid}<br><small>${processingText}</small></span>`;
+  updateList.appendChild(item);
+
+  try {
+    const r = await fetch(updateLicenseUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eid })
+    });
+    const data = await r.json().catch(() => null);
+
+    if (r.ok && data && data.ok) {
+      if (data.warning) {
+        const warnText = noUpdateText;
+        item.className = 'activation-item warning';
+        item.innerHTML = `<span class="activation-icon">⚠</span><span class="activation-text">${eid}<br><small>${warnText}</small></span>`;
+      } else {
+        item.className = 'activation-item success';
+        item.innerHTML = `<span class="activation-icon">✓</span><span class="activation-text">${eid}<br><small>${successText}</small></span>`;
+        try {
+          await doRefreshEid();
+        } catch (e) {
+          console.error('Failed to refresh after update', e);
+        }
+      }
+    } else {
+      const msg = data && data.error ? data.error : 'Unknown error';
+      item.className = 'activation-item error';
+      item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>${msg}</small></span>`;
+    }
+  } catch (e) {
+    item.className = 'activation-item error';
+    item.innerHTML = `<span class="activation-icon">✗</span><span class="activation-text">${eid}<br><small>Network error</small></span>`;
+  } finally {
+    updating = false;
   }
 }
 </script>

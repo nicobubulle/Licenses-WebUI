@@ -94,6 +94,14 @@
   "return_selected": "Devolver seleccionados",
   "select_all": "Seleccionar todo",
   "deactivation_steps": "Desactivación",
-  "deactivation_in_progress": "Procesando devolución",
+    "update_licenses": "Actualizar licencias",
+    "update_license": "Actualizar licencia",
+    "update_eid_label": "EID a actualizar:",
+    "update_selected": "Actualizar selección",
+    "update_steps": "Actualización",
+    "update_in_progress": "Actualizando licencia",
+    "update_success": "Licencia actualizada con éxito",
+    "update_not_available": "No hay actualización disponible para este EID",
+    "return_success": "Licencia devuelta exitosamente"
   "return_success": "Licencia devuelta exitosamente"
 }

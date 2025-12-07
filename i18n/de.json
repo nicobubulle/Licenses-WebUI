@@ -91,9 +91,17 @@
   "return_licenses": "Lizenzen zurückgeben",
   "return_license": "Lizenz zurückgeben",
   "return_eid_label": "EID zum Zurückgeben:",
+  "update_licenses": "Lizenzen aktualisieren",
+  "update_license": "Lizenz aktualisieren",
   "return_selected": "Auswahl zurückgeben",
+  "update_eid_label": "EID aktualisieren:",
   "select_all": "Alle auswählen",
+  "update_selected": "Auswahl aktualisieren",
   "deactivation_steps": "Deaktivierung",
   "deactivation_in_progress": "Verarbeitung der Rückgabe",
+  "update_steps": "Aktualisierung",
   "return_success": "Lizenz erfolgreich zurückgegeben"
-}
+  "return_success": "Lizenz erfolgreich zurückgegeben",
+  "update_in_progress": "Aktualisierung läuft",
+  "update_success": "Lizenz erfolgreich aktualisiert",
+  "update_not_available": "Kein Update für diese EID verfügbar"
