@@ -887,7 +887,7 @@ def store_feature_stats(licenses_data):
         logger.error(f"Failed to store feature stats: {e}")
 
 # Application version and GitHub repo for update checks
-VERSION = "1.7"
+VERSION = "1.8"
 GITHUB_REPO = "nicobubulle/Licenses-WebUI"
 GITHUB_RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 LATEST_VERSION = VERSION
