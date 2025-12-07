@@ -101,7 +101,7 @@
   "update_steps": "Mise à jour",
   "deactivation_in_progress": "Traitement du retour",
   "update_in_progress": "Mise à jour en cours",
-    "return_success": "Licence retournée avec succès",
-    "update_success": "Licence mise à jour avec succès",
-    "update_not_available": "Aucune mise à jour disponible pour cet EID"
+  "return_success": "Licence retournée avec succès",
+  "update_success": "Licence mise à jour avec succès",
+  "update_not_available": "Aucune mise à jour disponible pour cet EID"
 }

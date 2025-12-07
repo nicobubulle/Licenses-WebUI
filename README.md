@@ -59,6 +59,24 @@ Alternatively, use Task Scheduler for more control:
 schtasks /create /tn "Licenses WebUI" /tr "C:\path\to\Licenses_WebUI.exe" /sc onlogon /rl highest
 ```
 
+## Screenshots
+
+### Main Dashboard
+![Main Dashboard](Screenshots/1-Main.png)
+*Main license overview with feature grouping, version information, and maintenance status indicators*
+
+### Application Details
+![Application Details](Screenshots/2-AppDetail.png)
+*Detailed view of user checkouts with version tracking and status*
+
+### EID Overview
+![EID Overview](Screenshots/3-EIDOverview.png)
+*Enterprise ID management with feature mappings and bulk operations*
+
+### License Usage Statistics
+![License Usage Statistics](Screenshots/4-LicenseUsage.png)
+*Time-series graphs showing license usage trends over time*
+
 ### Core `config.ini` keys (SETTINGS section)
 - `lmutil_path`: Full path to `lmutil.exe` (default points to Leica folder).
 - `port`: FLEX license manager port (default `27008`).
