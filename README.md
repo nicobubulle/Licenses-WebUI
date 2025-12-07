@@ -17,6 +17,9 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 - **License Versions Column**: Displays per-feature version quantities from `lmstat -a --no-user-info` with 24h cache and unified refresh via the EID button
 - **Statistics Dashboard**: Track and visualize license usage over time with interactive graphs (SQLite storage)
 - **EID Information**: View detailed EID (Enterprise ID) mappings with feature grouping and license totals (admin-only)
+  - **CLM Actions**: Return or Update licenses per EID or in bulk with select-all, modals, and localized status (success, warning for "No updatable items found", errors)
+  - **Group Filter**: Filter EIDs by application/group via a dropdown in the EIDs view
+  - **License Activation**: Activate license keys directly from the EIDs admin page (same API as dashboard activation)
 - **Application Admin Mode**: Secure admin access via randomly generated MD5 key for sensitive features
 - Raw output debug view (`/raw`)
 - Windows service restart with robust state checking (requires OS admin + enabled in config)
@@ -100,6 +103,9 @@ Manual refresh (`POST /refresh`) performs the same parsing and runs duplicate, i
 - `/status` — JSON status (licenses + last_update + eid_info)
 - `/refresh` — POST to force synchronous refresh
 - `/refresh-eid` — POST to manually refresh EID cache (24-hour TTL, admin-only)
+- `/return-license` — POST return/deactivate a license by EID (admin-only)
+- `/update-license` — POST update a license by EID (admin-only; "No updatable items found" surfaces as warning)
+- `/activate-licenses` — POST activate one or more license keys (admin-only; used by EIDs page activation modal)
 - `/refresh-license-versions` — POST to refresh license versions cache (24-hour TTL, admin-only)
 - `/restart` — POST to request service restart (OS admin + enable_restart required)
 - `/raw` — raw lmstat output for debugging
@@ -154,6 +160,9 @@ The application tracks Entitlement ID (EID) information from CLM query-features 
 - Aggregates "other" group features into a single icon
 - Smart tooltips with viewport awareness
 - 24-hour cache with manual refresh capability
+- **Return/Update workflows**: Per-EID buttons plus checkbox multi-select (including select-all) with bulk Return/Update, live modal status, and localized messages; update uses warning status when CLM reports "No updatable items found"
+- **Activation**: Admin can paste license keys in the EIDs page modal; keys are validated client-side and sent to `/activate-licenses`
+- **Filtering**: Dropdown to filter EIDs by application/group defined in `feature_groups.json`
 - Column layout: EID number above feature icons
 
 **Access:**
