@@ -332,11 +332,33 @@
     </div>
   </div>
 
+  <!-- Admin Modal -->
+  <div id="admin-modal" class="modal" onclick="if(event.target===this) closeAdminModal()">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>{{ _('admin_modal_title') }}</h2>
+        <button class="modal-close" onclick="closeAdminModal()" aria-label="{{ _('close') }}">&times;</button>
+      </div>
+      <div>
+        <input id="admin-key-input" type="password" placeholder="{{ _('admin_key_placeholder') }}" style="width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 6px;" onkeydown="if(event.key==='Enter'){ submitAdminKey(); }">
+      </div>
+      <div style="margin-top: 12px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+        <button class="btn btn-ghost" onclick="closeAdminModal()">{{ _('close') }}</button>
+        <button class="btn btn-primary" onclick="submitAdminKey()">{{ _('activate') }}</button>
+      </div>
+    </div>
+  </div>
+
   <footer style="margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); text-align: center; color: var(--muted); font-size: 0.85em;">
     <p style="margin: 8px 0;">
       <button id="btn-refresh-eid" class="btn btn-ghost" style="font-size: 0.9em;">
         <span id="btn-refresh-eid-label">{{ _('refresh_eid_label') }}</span>
       </button>
+      {% if not admin_mode %}
+      <button id="btn-admin" class="btn btn-ghost" style="font-size: 0.9em; margin-left: 8px;">
+        {{ _('admin_mode_button') }}
+      </button>
+      {% endif %}
     </p>
     <p style="margin: 8px 0;">
       <strong>Licenses WebUI</strong> v{{ app_version }}
@@ -410,6 +432,7 @@ const btnRefreshEid = document.getElementById("btn-refresh-eid");
 const btnRefreshEidLabel = document.getElementById("btn-refresh-eid-label");
 const btnEids = document.getElementById("btn-eids");
 const btnStats = document.getElementById("btn-stats");
+const btnAdmin = document.getElementById("btn-admin");
 const toast = document.getElementById("toast");
 
 let refreshing = false;
@@ -461,6 +484,29 @@ function showEidModal(groupTitle, eidListStr) {
 function closeEidModal() {
   const modal = document.getElementById('eid-modal');
   modal.classList.remove('show');
+}
+
+function openAdminModal() {
+  const modal = document.getElementById('admin-modal');
+  modal.classList.add('show');
+  setTimeout(() => document.getElementById('admin-key-input')?.focus(), 50);
+}
+
+function closeAdminModal() {
+  const modal = document.getElementById('admin-modal');
+  modal.classList.remove('show');
+}
+
+function submitAdminKey() {
+  const input = document.getElementById('admin-key-input');
+  const key = (input && input.value ? input.value.trim() : '');
+  if (!key) {
+    showToast(t('admin_key_required'));
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('admin', key);
+  window.location.href = url.toString();
 }
 
 function getGroupForFeature(featureName) {
@@ -858,6 +904,7 @@ async function doRefreshEid(){
 btnRefresh.addEventListener("click", doRefresh);
 if(btnRestart) btnRestart.addEventListener("click", doRestart);
 if(btnRefreshEid) btnRefreshEid.addEventListener("click", doRefreshEid);
+if(btnAdmin) btnAdmin.addEventListener("click", openAdminModal);
 
 // initial
 fetchStatus();

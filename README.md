@@ -145,6 +145,29 @@ The application automatically tracks license usage changes in a SQLite database 
 
 Access the dashboard via the "📊 Statistics" button in the main UI toolbar.
 
+## Admin Mode
+The application provides an admin mode for accessing sensitive features like the EID overview page, license activation, return/update operations, and other administrative functions.
+
+**Activating Admin Mode:**
+There are two ways to activate admin mode:
+1. **Via URL parameter**: Append `?admin=<your_admin_key>` to any page URL
+2. **Via Admin Modal**: Click the "Admin mode" button in the footer and enter your admin key in the popup
+
+Once authenticated, the session persists for 7 days via a secure cookie.
+
+**Admin Key:**
+The admin key is automatically generated on first run and stored in `config.ini` under `[SETTINGS]` as `admin_key`. This is a random MD5 hash that provides application-level authentication. Keep this key secure and do not share it.
+
+**Admin vs Non-Admin:**
+- **OS Admin Mode**: Windows administrator privileges (required for service restart button)
+- **App Admin Mode**: Application-level authentication via `admin_key` (required for EID page and sensitive features)
+
+These are two separate authentication levels. OS admin mode requires Windows UAC elevation at startup (if `enable_restart = yes`), while app admin mode uses the `admin_key` for web-based authentication.
+
+**Restricting Features:**
+- Service restart can be restricted to app admin users via `admin_restriction_restart = yes` in `config.ini`
+- EID button visibility for non-admin users can be controlled via `show_eid_info = yes` in `config.ini`
+
 ## Version Information Display
 Each user checkout displays detailed version information with visual indicators:
 
@@ -172,11 +195,12 @@ When a feature group has `"check_maint": false` in `feature_groups.json`, all us
 Hover over any maintenance icon to see detailed status information in your preferred language.
 
 ## EID Information
-The application tracks Entitlement ID (EID) information from CLM query-features output and provides a dedicated admin-only overview page.
+The application tracks Entitlement ID (EID) information from CLM query-features output and provides a dedicated overview page.
 
 **Requirements:**
 - CLM version 2.20 or higher is required for EID functionality
 - If CLM is outdated or unavailable, EID features will be automatically hidden
+- **Admin mode is required** to access the EID page (see Admin Mode section)
 
 **Features:**
 - Maps each EID to its associated features with group icons
@@ -185,22 +209,11 @@ The application tracks Entitlement ID (EID) information from CLM query-features 
 - Smart tooltips with viewport awareness
 - 24-hour cache with manual refresh capability
 - **Return/Update workflows**: Per-EID buttons plus checkbox multi-select (including select-all) with bulk Return/Update, live modal status, and localized messages; update uses warning status when CLM reports "No updatable items found"
-- **Activation**: Admin can paste license keys in the EIDs page modal; keys are validated client-side and sent to `/activate-licenses`
+- **Activation**: Paste license keys in the EIDs page modal; keys are validated client-side and sent to `/activate-licenses`
 - **Filtering**: Dropdown to filter EIDs by application/group defined in `feature_groups.json`
 - Column layout: EID number above feature icons
 
-**Access:**
-1. Authenticate with admin key: append `?admin=<your_admin_key>` to URL (persists for 7 days via cookie)
-2. Click the "🔑 EID Info" button in the toolbar
-3. Or navigate directly to `/eids`
-
-The admin key is auto-generated on first run and stored in `config.ini` under `[SETTINGS]` as `admin_key`. Keep this key secure.
-
-**Admin vs Non-Admin:**
-- **OS Admin Mode**: Windows administrator privileges (required for service restart)
-- **App Admin Mode**: Application-level authentication via `admin_key` (required for EID page and sensitive features)
-
-Configure `show_eid_info = yes` in `config.ini` to make the EID button visible to non-admin users.
+Access the EID page by clicking the "🔑 EID Info" button in the toolbar or navigating directly to `/eids`. Configure `show_eid_info = yes` in `config.ini` to make the EID button visible to non-admin users.
 
 ## Feature Grouping
 Licenses are automatically organized into collapsible categories with custom icons for easier navigation. Groups are collapsed by default and can be toggled by clicking the header.

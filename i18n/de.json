@@ -103,5 +103,9 @@
   "update_in_progress": "Aktualisierung läuft",
   "return_success": "Lizenz erfolgreich zurückgegeben",
   "update_success": "Lizenz erfolgreich aktualisiert",
-  "update_not_available": "Kein Update für diese EID verfügbar"
+  "update_not_available": "Kein Update für diese EID verfügbar",
+  "admin_modal_title": "Admin-Schlüssel eingeben",
+  "admin_key_placeholder": "Admin-Schlüssel",
+  "admin_mode_button": "Admin-Modus",
+  "admin_key_required": "Bitte geben Sie den Admin-Schlüssel ein"
 }

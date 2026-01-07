@@ -103,5 +103,9 @@
   "update_in_progress": "Mise à jour en cours",
   "return_success": "Licence retournée avec succès",
   "update_success": "Licence mise à jour avec succès",
-  "update_not_available": "Aucune mise à jour disponible pour cet EID"
+  "update_not_available": "Aucune mise à jour disponible pour cet EID",
+  "admin_modal_title": "Entrer la clé admin",
+  "admin_key_placeholder": "Clé admin",
+  "admin_mode_button": "Mode admin",
+  "admin_key_required": "Veuillez entrer la clé admin"
 }

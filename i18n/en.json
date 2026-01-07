@@ -103,5 +103,9 @@
   "update_in_progress": "Updating license",
   "return_success": "License returned successfully",
   "update_success": "License updated successfully",
-  "update_not_available": "No update available for this EID"
+  "update_not_available": "No update available for this EID",
+  "admin_modal_title": "Enter admin key",
+  "admin_key_placeholder": "Admin key",
+  "admin_mode_button": "Admin mode",
+  "admin_key_required": "Please enter the admin key"
 }
