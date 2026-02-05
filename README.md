@@ -42,7 +42,7 @@ FLEXnet License Status Web UI — small local web app to query lmutil/lmstat and
 
 ## Quickstart (Windows)
 > Important: Installation is only required on the server hosting CLM. There is nothing to install on client machines.
-1. Download / build the executable and run it (first start will create `config.ini` if missing).
+1. [Download exe file here](https://github.com/nbullier/Licenses-WebUI/releases/latest) and run it (first start will create `config.ini` if missing).
 2. Edit `config.ini` as needed (see below). Restart app after changing values.
 3. Browser auto-opens at `http://localhost:<web_port>`.
 4. Optional: configure Teams notifications (see `TEAMS_SETUP.md`).
