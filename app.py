@@ -400,7 +400,7 @@ admin_restriction_restart = yes
 # Examples by language:
 #   US:  %%m/%%d/%%Y %%I:%%M %%p  -> 12/05/2025 02:26 PM
 #   EU:   %%d/%%m/%%Y %%H:%%M      -> 05/12/2025 14:26
-format = %%d/%%m/%%Y %%H:%%M
+format = %d/%m/%Y %H:%M
 
 [SERVICE]
 # Windows service name to restart
