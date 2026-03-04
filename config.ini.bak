@@ -1,0 +1,76 @@
+; Licenses WebUI configuration
+[SETTINGS]
+# Path to lmutil.exe (example)
+lmutil_path = C:\Program Files (x86)\Leica Geosystems\CLM\lmutil.exe
+
+# License manager port
+port = 27008
+
+# Web UI port
+web_port = 8080
+
+# Auto-refresh interval in minutes
+refresh_minutes = 5
+
+# Default UI language (en, fr, de, es)
+default_locale = en
+
+# Comma-separated substrings of features to hide
+hide_list = 
+
+# Enable the Restart service button (yes/no)
+enable_restart = yes
+
+# Restrict restart button to admin only (yes/no)
+admin_restriction_restart = yes
+
+# Show EID info button to non-admin users (yes/no)
+show_eid_info = no
+
+# Admin key (auto-generated, keep secret)
+admin_key = 
+
+[DATE_FORMAT]
+# Date and time format (Python strftime format)
+# Examples by language:
+#   US:  %m/%d/%Y %I:%M %p  -> 12/05/2025 02:26 PM
+#   EU:  %d/%m/%Y %H:%M      -> 05/12/2025 14:26
+format = %d/%m/%Y %H:%M
+
+[SERVICE]
+# Windows service name to restart
+service_name = FLEXnet License Server
+
+[TEAMS]
+# Enable sending notifications to Microsoft Teams (yes/no)
+enabled = no
+
+# Incoming webhook URL for Microsoft Teams (set this to your connector URL)
+webhook = 
+
+# Enable the "update available" notification (yes/no)
+notify_update = no
+
+# Enable duplicate user checker notification (yes/no)
+notify_duplicate_checker = no
+
+# Enable inconsistent license notification (yes/no)
+notify_inconsistent = no
+
+# Enable extratime notification (yes/no)
+notify_extratime = no
+
+# Extratime duration threshold in hours (default 72h)
+extratime_duration = 72
+
+# Comma-separated list of features to exclude from extratime notifications
+extratime_exclusion = 
+
+# Enable sold-out notification (yes/no)
+notify_soldout = no
+
+# Comma-separated list of features to exclude from sold-out notifications
+soldout_exclusion = 
+
+# Enable daemon status notifications (yes/no)
+notify_daemon = no

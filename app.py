@@ -16,13 +16,34 @@ import sys
 
 app = Flask(__name__)
 
-# ---------- Logging Setup ----------
-# Create logs directory if it doesn't exist
-logs_dir = "logs"
-if not os.path.exists(logs_dir):
-    os.makedirs(logs_dir)
+# Determine absolute app base path next to script or executable (frozen)
+if getattr(sys, 'frozen', False):
+    _BASE_DIR = os.path.dirname(sys.executable)
+else:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Log file path
+# ---------- Logging Setup ----------
+# Resolve logs directory safely (Task Scheduler may start in C:\Windows\System32)
+_candidate_log_dirs = [
+    os.path.join(_BASE_DIR, "logs"),
+    os.path.join(os.environ.get("LOCALAPPDATA", ""), "Licenses_WebUI", "logs"),
+    os.path.join(os.environ.get("TEMP", ""), "Licenses_WebUI", "logs"),
+]
+
+logs_dir = None
+for _candidate in _candidate_log_dirs:
+    if not _candidate:
+        continue
+    try:
+        os.makedirs(_candidate, exist_ok=True)
+        logs_dir = _candidate
+        break
+    except Exception:
+        continue
+
+if not logs_dir:
+    raise RuntimeError("Unable to create a writable logs directory")
+
 log_file = os.path.join(logs_dir, "Licenses_WebUI.log")
 
 # Configure logging to both file and console
@@ -78,11 +99,6 @@ STATE_RUNNING = 4
 
 # ---------- Config ----------
 cfg = configparser.ConfigParser(interpolation=None)
-# Determine absolute config path next to script or executable (frozen)
-if getattr(sys, 'frozen', False):
-    _BASE_DIR = os.path.dirname(sys.executable)
-else:
-    _BASE_DIR = os.path.dirname(__file__)
 config_path = os.path.join(_BASE_DIR, "config.ini")
 logger.debug(f"Resolved config.ini path: {config_path}")
 

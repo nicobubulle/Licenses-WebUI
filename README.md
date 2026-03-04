@@ -60,6 +60,17 @@ Alternatively, use Task Scheduler for more control:
 schtasks /create /tn "Licenses WebUI" /tr "C:\path\to\Licenses_WebUI.exe" /sc onlogon /rl highest
 ```
 
+Recommended Task Scheduler settings (important):
+- **Action**: `Start a program`
+  - **Program/script**: full path to `Licenses_WebUI.exe`
+  - **Start in (optional)**: folder containing `Licenses_WebUI.exe` (for example `C:\Tools\Licenses-WebUI`)
+- **General**:
+  - Run with a dedicated user account that has write access to the app folder (or `%LOCALAPPDATA%`)
+  - Select **Run only when user is logged on** if you need tray/UI behavior
+  - Enable **Run with highest privileges** only if restart-service features are required
+
+Why this matters: when `Start in` is left empty, Task Scheduler can use `C:\Windows\System32` as the working directory, which may cause permission errors when writing logs.
+
 ## Screenshots
 
 ### Main Dashboard
