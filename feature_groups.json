@@ -10,6 +10,7 @@
         "TLS_CYCL.Register"
       ],
       "releases": [
+        { "app_version": "2026.0.1", "date": "2025-11-30" },
         { "app_version": "2026.0.0", "date": "2025-11-30" },
         { "app_version": "2025.0.1", "date": "2025-02-01" },
         { "app_version": "2025.0.0", "date": "2025-02-01" },
@@ -44,6 +45,7 @@
         "TLS_CYCL.Register360BLK"
       ],
       "releases": [
+        { "app_version": "2026.0.1", "date": "2025-11-30" },
         { "app_version": "2026.0.0", "date": "2025-11-30" },
         { "app_version": "2025.0.1", "date": "2025-02-01" },
         { "app_version": "2025.0.0", "date": "2025-02-01" },
@@ -78,6 +80,7 @@
         "TLS_CYCL.PublisherPro"
       ],
       "releases": [
+        { "app_version": "2026.0.1", "date": "2025-11-30" },
         { "app_version": "2026.0.0", "date": "2025-11-30" },
         { "app_version": "2025.0.1", "date": "2025-02-01" },
         { "app_version": "2025.0.0", "date": "2025-02-01" },
@@ -121,6 +124,7 @@
         "TLS_CYCL.3DR*"
       ],
       "releases": [
+        { "app_version": "2026.0.1", "date": "2025-10-01" },
         { "app_version": "2026.0.0", "date": "2025-10-01" },
         { "app_version": "2025.2.2", "date": "2025-10-01" },
         { "app_version": "2025.2.1", "date": "2025-10-01" },
