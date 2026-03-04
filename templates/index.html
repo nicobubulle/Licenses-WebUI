@@ -419,6 +419,19 @@ function t(key, vars){
   return v.replace(/\{(\w+)\}/g, (_,n)=> (vars[n]!==undefined?vars[n]:''));
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
 const statusUrl = "/status";
 const refreshUrl = "/refresh";
 const restartUrl = "/restart";
@@ -437,6 +450,13 @@ const toast = document.getElementById("toast");
 
 let refreshing = false;
 let refreshingEid = false;
+let statusFetchSeq = 0;
+let statusFetchController = null;
+let refreshIntervalId = null;
+
+if (window.__licensesWebUiRefreshIntervalId) {
+  clearInterval(window.__licensesWebUiRefreshIntervalId);
+}
 
 // Navigation handlers
 if (btnEids) {
@@ -604,9 +624,19 @@ function getVersionColorInfo(versionStr, groupReleases) {
 }
 
 async function fetchStatus(){
+  const fetchSeq = ++statusFetchSeq;
+  if (statusFetchController) {
+    statusFetchController.abort();
+  }
+  statusFetchController = new AbortController();
+
   try {
-    const r = await fetch(statusUrl);
+    const r = await fetch(statusUrl, { signal: statusFetchController.signal });
     const data = await r.json();
+    if (fetchSeq !== statusFetchSeq) {
+      return;
+    }
+
     const tbody = document.getElementById("tbody");
     const lastDiv = document.getElementById("last");
     const errDiv = document.getElementById("error");
@@ -663,15 +693,18 @@ async function fetchStatus(){
         const isCollapsed = collapsedGroups.has(groupId);
         const eidCount = groupData.eids.size;
         const eidList = Array.from(groupData.eids).sort().join(', ');
+        const groupTitleEscaped = escapeHtml(grp.title || groupId);
         const canShowEidButton = {{ (admin_mode or show_eid_info)|tojson }};
-        const eidInfoBtnHtml = canShowEidButton ? `<span class="eid-info-icon" onclick="event.stopPropagation(); showEidModal('${grp.title}', '${eidList}')" title="${t('view_eids')}">ⓘ</span>` : '';
+        const eidInfoBtnHtml = canShowEidButton
+          ? `<span class="eid-info-icon" onclick='event.stopPropagation(); showEidModal(${JSON.stringify(grp.title || groupId)}, ${JSON.stringify(eidList)})' title="${escapeAttr(t('view_eids'))}">ⓘ</span>`
+          : '';
         const eidDisplay = groupId !== 'other' && eidCount > 0 ? `<span class="eid-count">${eidCount} EID ${eidInfoBtnHtml}</span>` : '';
         
-        html += `<tr class="group-header" onclick="toggleGroup('${groupId}')">
+        html += `<tr class="group-header" onclick='toggleGroup(${JSON.stringify(groupId)})'>
                   <td colspan="4">
                     <div class="group-header-content">
-                      <img src="${grp.icon || 'static/icons/other.png'}" class="group-icon" alt="${grp.title}" />
-                      <span>${grp.title || groupId}</span>
+                      <img src="${escapeAttr(grp.icon || 'static/icons/other.png')}" class="group-icon" alt="${groupTitleEscaped}" />
+                      <span>${groupTitleEscaped}</span>
                       ${eidDisplay}
                       <span class="group-toggle ${isCollapsed ? 'collapsed' : ''}" id="group-toggle-${groupId}">▼</span>
                     </div>
@@ -695,8 +728,8 @@ async function fetchStatus(){
             for (const [version, qty] of Object.entries(featureVersions).sort()) {
               const colorInfo = getVersionColorInfo(version, groupReleases);
               const classAttr = colorInfo.class ? ` class="${colorInfo.class}"` : '';
-              const titleAttr = colorInfo.tooltip ? ` title="${colorInfo.tooltip}"` : '';
-              versionLines.push(`<span${classAttr}${titleAttr}>v${version}: ${qty}</span>`);
+              const titleAttr = colorInfo.tooltip ? ` title="${escapeAttr(colorInfo.tooltip)}"` : '';
+              versionLines.push(`<span${classAttr}${titleAttr}>v${escapeHtml(version)}: ${escapeHtml(qty)}</span>`);
             }
             versionsHtml = versionLines.join('<br>');
           } else {
@@ -734,11 +767,11 @@ async function fetchStatus(){
               
               const colorInfo = getVersionColorInfo(fv, groupReleases);
               const versionClassAttr = colorInfo.class ? ` class="${colorInfo.class}"` : '';
-              const versionTitleAttr = colorInfo.tooltip ? ` title="${colorInfo.tooltip}"` : '';
+              const versionTitleAttr = colorInfo.tooltip ? ` title="${escapeAttr(colorInfo.tooltip)}"` : '';
               
               // Version header
               const suffix = users.length > 1 ? (I18N['users_count_suffix'] || 's') : '';
-              usersHtml += `<div style="margin-top: 8px; margin-bottom: 4px; font-weight: 600;"><span${versionClassAttr}${versionTitleAttr}>🔑 v${fv}</span> (${t('users_count', {n: users.length, suffix})})</div>`;
+              usersHtml += `<div style="margin-top: 8px; margin-bottom: 4px; font-weight: 600;"><span${versionClassAttr}${versionTitleAttr}>🔑 v${escapeHtml(fv)}</span> (${escapeHtml(t('users_count', {n: users.length, suffix}))})</div>`;
               
               // Users in this version
               for (const u of users) {
@@ -786,12 +819,12 @@ async function fetchStatus(){
                 const appVersion = u.app_version || u.version || null;
                 const versionInfo = appVersion ? `💻 v${appVersion}` : t('version_unknown');
                 
-                const maintIconHtml = maintIcon ? `<span class="maint-icon ${maintClass}" title="${maintTooltip}">${maintIcon}</span>` : '';
+                const maintIconHtml = maintIcon ? `<span class="maint-icon ${maintClass}" title="${escapeAttr(maintTooltip)}">${maintIcon}</span>` : '';
                 
                 // Apply duplicate styling
                 const duplicateStyle = isDuplicate ? ' style="color: red; font-weight: bold;"' : '';
                 
-                usersHtml += `<div class="user-line" style="margin-left: 16px;">${maintIconHtml}<span${duplicateStyle}>${u.user} @ ${u.computer} — ${versionInfo} — ${u.start}</span></div>`;
+                usersHtml += `<div class="user-line" style="margin-left: 16px;">${maintIconHtml}<span${duplicateStyle}>${escapeHtml(u.user)} @ ${escapeHtml(u.computer)} — ${escapeHtml(versionInfo)} — ${escapeHtml(u.start)}</span></div>`;
               }
             }
           } else {
@@ -799,8 +832,8 @@ async function fetchStatus(){
           }
 
           html += `<tr class="group-content group-${groupId} ${isCollapsed ? 'collapsed' : ''}">
-                    <td><strong>${name}</strong></td>
-                    <td>${usage}</td>
+                    <td><strong>${escapeHtml(name)}</strong></td>
+                    <td>${escapeHtml(usage)}</td>
                     <td class="versions">${versionsHtml}</td>
                     <td class="users">${usersHtml}</td>
                   </tr>`;
@@ -812,6 +845,9 @@ async function fetchStatus(){
     tbody.innerHTML = html;
     lastDiv.textContent = t('last_update', {when: new Date(data.last_update*1000).toLocaleString()});
   } catch (e) {
+    if (e && e.name === 'AbortError') {
+      return;
+    }
     document.getElementById("tbody").innerHTML = `<tr><td colspan='4'>${t('fetch_error')}</td></tr>`;
      document.getElementById("error").textContent = e.toString();
   }
@@ -901,15 +937,21 @@ async function doRefreshEid(){
   }
 }
 
-btnRefresh.addEventListener("click", doRefresh);
-if(btnRestart) btnRestart.addEventListener("click", doRestart);
-if(btnRefreshEid) btnRefreshEid.addEventListener("click", doRefreshEid);
-if(btnAdmin) btnAdmin.addEventListener("click", openAdminModal);
+if (!window.__licensesWebUiInitialized) {
+  btnRefresh.addEventListener("click", doRefresh);
+  if(btnRestart) btnRestart.addEventListener("click", doRestart);
+  if(btnRefreshEid) btnRefreshEid.addEventListener("click", doRefreshEid);
+  if(btnAdmin) btnAdmin.addEventListener("click", openAdminModal);
 
-// initial
-fetchStatus();
-// auto refresh
-setInterval(fetchStatus, REFRESH_MS);
+  // initial
+  fetchStatus();
+  // auto refresh
+  refreshIntervalId = setInterval(fetchStatus, REFRESH_MS);
+  window.__licensesWebUiRefreshIntervalId = refreshIntervalId;
+  window.__licensesWebUiInitialized = true;
+} else {
+  fetchStatus();
+}
 </script>
 </body>
 </html>
