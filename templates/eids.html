@@ -226,6 +226,15 @@ function t(key, params = {}) {
   return v;
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Build map of group info for icon fallback
 const groupInfoById = {};
 if (FEATURE_GROUPS.groups) {
@@ -273,6 +282,17 @@ function renderEids() {
   let html = '';
   eids.forEach(eid => {
     const features = EIDS[eid];
+    const normalizeClmDateLabel = (v) => v === '__PERMANENT__' ? t('license_permanent') : v;
+    const expirationValues = Array.from(new Set((features || []).map(f => normalizeClmDateLabel(f.expiration)).filter(v => v)));
+    const maintenanceValues = Array.from(new Set((features || []).map(f => normalizeClmDateLabel(f.maintenance)).filter(v => v)));
+    const expirationText = expirationValues.length > 1 ? expirationValues.join(' / ') : (expirationValues[0] || '');
+    const maintenanceText = maintenanceValues.length > 1 ? maintenanceValues.join(' / ') : (maintenanceValues[0] || '');
+    const eidMetaParts = [];
+    if (expirationText) eidMetaParts.push(`${t('license_expiration')}: ${expirationText}`);
+    if (maintenanceText) eidMetaParts.push(`${t('license_maintenance')}: ${maintenanceText}`);
+    const eidMetaHtml = eidMetaParts.length > 0
+      ? `<div class="small" style="margin-top:2px;">${eidMetaParts.map(escapeHtml).join(' — ')}</div>`
+      : '';
     
     // Filter features by selected group
     let filteredFeatures = features;
@@ -292,7 +312,7 @@ function renderEids() {
     const returnLabel = I18N['return_license'] || 'Return License';
     const updateLabel = I18N['update_license'] || 'Update License';
     const isChecked = selectedEids.has(eid) ? 'checked' : '';
-    html += `<div class="eid-row"><div class="eid-header"><div class="eid-left-group"><input type="checkbox" class="eid-checkbox" data-eid="${eid}" ${isChecked} /><div class="eid-label">${eid}</div></div><div class="eid-actions"><button class="icon-btn btn-return" data-eid="${eid}" title="${returnLabel}"><img src="${crossIconUrl}" alt="${returnLabel}" /></button><button class="icon-btn btn-update" data-eid="${eid}" title="${updateLabel}"><img src="${downIconUrl}" alt="${updateLabel}" /></button></div></div><div class="eid-icons">`;
+    html += `<div class="eid-row"><div class="eid-header"><div class="eid-left-group"><input type="checkbox" class="eid-checkbox" data-eid="${eid}" ${isChecked} /><div><div class="eid-label">${eid}</div>${eidMetaHtml}</div></div><div class="eid-actions"><button class="icon-btn btn-return" data-eid="${eid}" title="${returnLabel}"><img src="${crossIconUrl}" alt="${returnLabel}" /></button><button class="icon-btn btn-update" data-eid="${eid}" title="${updateLabel}"><img src="${downIconUrl}" alt="${updateLabel}" /></button></div></div><div class="eid-icons">`;
     // Render non-other features individually (can duplicate group icons)
     nonOtherFeatures.forEach(f => {
       const g = f.group && groupInfoById[f.group] ? groupInfoById[f.group] : otherGroup;
@@ -382,12 +402,21 @@ async function doRefreshEid(){
         });
         // Merge license info
         const licenses = statusData.licenses || {};
+        const clmFeatureInfo = statusData.clm_feature_info || {};
         const rebuilt = {};
         Object.keys(inverted).forEach(eid => {
           rebuilt[eid] = inverted[eid].map(feat => {
             const lic = licenses[feat] || {};
+            const clm = clmFeatureInfo[feat] || {};
             // group is resolved client-side again
-            return { feature: feat, total: lic.total ?? null, used: lic.used ?? null, group: resolveGroup(feat) };
+            return {
+              feature: feat,
+              total: lic.total ?? null,
+              used: lic.used ?? null,
+              group: resolveGroup(feat),
+              expiration: clm.expiration || null,
+              maintenance: clm.maintenance || null
+            };
           });
         });
         // Replace global EIDS and re-render

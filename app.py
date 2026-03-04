@@ -717,7 +717,31 @@ except Exception as e:
     logger.warning(f"Failed to load date format from config: {e}. Using default.")
     DATE_FORMAT = "%d/%m/%Y %H:%M"
 
+
+def build_date_only_format(fmt: str) -> str:
+    """Build a date-only strftime format from a configured date+time format."""
+    if not fmt:
+        return "%d/%m/%Y"
+
+    date_fmt = str(fmt)
+
+    # Remove common time directives
+    for token in ("%H", "%I", "%M", "%S", "%p", "%f", "%X", "%r", "%T"):
+        date_fmt = date_fmt.replace(token, "")
+
+    # Cleanup separators/spaces left behind after token removal
+    date_fmt = re.sub(r"\s{2,}", " ", date_fmt)
+    date_fmt = re.sub(r"\s*([:/\.-])\s*", r"\1", date_fmt)
+    date_fmt = re.sub(r"[\s:/\.-]+$", "", date_fmt)
+    date_fmt = re.sub(r"^[\s:/\.-]+", "", date_fmt)
+
+    return date_fmt or "%d/%m/%Y"
+
+
+DATE_ONLY_FORMAT = build_date_only_format(DATE_FORMAT)
+
 logger.debug(f"Loaded date format: {DATE_FORMAT}")
+logger.debug(f"Derived date-only format: {DATE_ONLY_FORMAT}")
 
 # Feature groups configuration
 FEATURE_GROUPS = {}
@@ -791,6 +815,7 @@ _eid_cache = {}
 _eid_cache_timestamp = 0
 EID_CACHE_DURATION = 24 * 3600  # 24 hours in seconds
 _clm_available = None  # None = unknown, True = working, False = failed
+_clm_feature_info_cache = {}
 
 # License version information cache
 _license_versions_cache = {}
@@ -799,11 +824,11 @@ LICENSE_VERSIONS_CACHE_DURATION = 24 * 3600  # 24 hours in seconds
 
 def refresh_eid_cache():
     """Refresh the EID cache by running CLM query-features command."""
-    global _eid_cache, _eid_cache_timestamp, _clm_available
+    global _eid_cache, _eid_cache_timestamp, _clm_available, _clm_feature_info_cache
     try:
         clm_output = try_clm_query_features()
         if clm_output:
-            _eid_cache = parse_eid_info(clm_output)
+            _eid_cache, _clm_feature_info_cache = parse_clm_query_features_info(clm_output)
             _eid_cache_timestamp = time.time()
             _clm_available = True
             logger.info(f"EID cache refreshed: {len(_eid_cache)} features")
@@ -811,9 +836,11 @@ def refresh_eid_cache():
         else:
             # CLM command failed or returned nothing
             _clm_available = False
+            _clm_feature_info_cache = {}
             logger.warning("CLM query-features failed or returned no data - EID features will be hidden")
     except Exception as e:
         _clm_available = False
+        _clm_feature_info_cache = {}
         logger.error(f"Failed to refresh EID cache: {e} - EID features will be hidden")
     return False
 
@@ -828,6 +855,19 @@ def get_eid_info():
         refresh_eid_cache()
     
     return _eid_cache
+
+
+def get_clm_feature_info():
+    """Get CLM feature metadata from cache, refreshing if needed."""
+    global _clm_feature_info_cache, _eid_cache_timestamp
+
+    # Shares refresh cycle with EID cache (same command/query)
+    cache_age = time.time() - _eid_cache_timestamp
+    if (_clm_feature_info_cache is None or len(_clm_feature_info_cache) == 0) and cache_age > EID_CACHE_DURATION:
+        logger.debug(f"CLM feature info cache stale (age: {cache_age:.0f}s), refreshing...")
+        refresh_eid_cache()
+
+    return _clm_feature_info_cache or {}
 
 def init_stats_db():
     """Initialize SQLite database for statistics tracking.
@@ -1484,38 +1524,103 @@ def try_clm_query_features():
         return None
 
 
-def parse_eid_info(raw_text):
+def parse_clm_query_features_info(raw_text):
     """
-    Parse CLM query-features output to extract EID to feature mapping.
-    
-    Returns: Dict mapping feature names to set of EIDs
+    Parse CLM query-features output.
+
+    Supports both legacy and new CLI output formats.
+
+    Returns:
+      - feature_to_eids: Dict[str, Set[str]]
+      - feature_info: Dict[str, Dict[str, Any]] where keys may include
+          used, total, expiration, maintenance
     """
+
+    def _format_clm_date(date_value):
+        """Format CLM date using configured DATE_FORMAT.
+
+        Special cases:
+        - 0-00-00 => permanent license marker
+        - None/empty => None
+        - unparsable values are returned as-is
+        """
+        if date_value is None:
+            return None
+
+        raw = str(date_value).strip()
+        if not raw:
+            return None
+
+        # CLM permanent indicator
+        if raw == "0-00-00":
+            return "__PERMANENT__"
+
+        # Expected CLM date format: YYYY-MM-DD
+        try:
+            dt = datetime.datetime.strptime(raw, "%Y-%m-%d")
+            return dt.strftime(DATE_ONLY_FORMAT)
+        except Exception:
+            return raw
+
     if not raw_text:
-        return {}
-    
+        return {}, {}
+
     feature_to_eids = {}
+    feature_info = {}
     current_eid = None
-    
+
     # Pattern: - 00112-15895-00040-08571-EEC92 (Floating):
     eid_pattern = re.compile(r'^\s*-\s*([0-9A-F]{5}-[0-9A-F]{5}-[0-9A-F]{5}-[0-9A-F]{5}-[0-9A-F]{5})\s+\(', re.IGNORECASE)
-    # Pattern: - M3D_CLWRX.ArcGIS 0/1
-    feature_pattern = re.compile(r'^\s*-\s+([A-Za-z0-9_\.]+)\s+\d+/\d+')
-    
+
+    # Legacy/new feature line starts similarly; metadata after usage is optional
+    # Examples:
+    # - TLS_SW_Lic.DemoInt 0/1
+    # - TLS_SW_Lic.DemoInt 1/1 Expiration 2026-04-30 Maintenance 2026-04-30
+    feature_usage_pattern = re.compile(
+        r'^\s*-\s+([A-Za-z0-9_\.]+)\s+(\d+)/(\d+)(?:\s+Expiration\s+([^\s]+))?(?:\s+Maintenance\s+([^\s]+))?',
+        re.IGNORECASE
+    )
+
     for line in raw_text.splitlines():
         eid_match = eid_pattern.search(line)
         if eid_match:
             current_eid = eid_match.group(1).upper()
             continue
-        
-        if current_eid:
-            feature_match = feature_pattern.search(line)
-            if feature_match:
-                feature_name = feature_match.group(1)
-                if feature_name not in feature_to_eids:
-                    feature_to_eids[feature_name] = set()
-                feature_to_eids[feature_name].add(current_eid)
-    
-    logger.debug(f"Parsed EID info for {len(feature_to_eids)} features")
+
+        if not current_eid:
+            continue
+
+        feature_match = feature_usage_pattern.search(line)
+        if not feature_match:
+            continue
+
+        feature_name = feature_match.group(1)
+        used = int(feature_match.group(2))
+        total = int(feature_match.group(3))
+        expiration = _format_clm_date(feature_match.group(4))
+        maintenance = _format_clm_date(feature_match.group(5))
+
+        if feature_name not in feature_to_eids:
+            feature_to_eids[feature_name] = set()
+        feature_to_eids[feature_name].add(current_eid)
+
+        # Keep most complete info if feature appears multiple times
+        existing = feature_info.get(feature_name, {})
+        merged = {
+            "used": used,
+            "total": total,
+            "expiration": expiration or existing.get("expiration"),
+            "maintenance": maintenance or existing.get("maintenance"),
+        }
+        feature_info[feature_name] = merged
+
+    logger.debug(f"Parsed CLM info for {len(feature_to_eids)} features")
+    return feature_to_eids, feature_info
+
+
+def parse_eid_info(raw_text):
+    """Backward-compatible helper returning only feature -> EID mapping."""
+    feature_to_eids, _ = parse_clm_query_features_info(raw_text)
     return feature_to_eids
 
 
@@ -2630,6 +2735,7 @@ def status():
         
         # Get EID information from cache (only if CLM is available)
         eid_data = get_eid_info() if _clm_available else {}
+        clm_feature_info = get_clm_feature_info() if _clm_available else {}
         
         # Get license version information from cache
         license_versions = get_license_versions()
@@ -2639,7 +2745,8 @@ def status():
             "last_update": _last_update,
             "licenses": filtered,
             "eid_info": {fname: list(eids) for fname, eids in eid_data.items()} if _clm_available else {},
-            "license_versions": license_versions
+            "license_versions": license_versions,
+            "clm_feature_info": clm_feature_info
         })
 
 
@@ -2779,6 +2886,7 @@ def eids_page():
     with _lock:
         eid_feature_map_raw = _eid_cache.copy()
         licenses_snapshot = _parsed.copy()
+    clm_feature_info = get_clm_feature_info() if _clm_available else {}
 
     # Pre-compute group resolution helpers
     exact_map = {}
@@ -2819,6 +2927,8 @@ def eids_page():
                 'total': total if total is not None else None,
                 'used': used if used is not None else None,
                 'group': group_id,
+                'expiration': (clm_feature_info.get(feature) or {}).get('expiration'),
+                'maintenance': (clm_feature_info.get(feature) or {}).get('maintenance'),
             })
 
     # Sort features inside each EID for stable display
